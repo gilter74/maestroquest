@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="Maestro"/>
+<meta name="theme-color" content="#060a18"/>
+<link id="manifestLink" rel="manifest"/>
+<link id="touchIcon" rel="apple-touch-icon"/>
+<title>🎼 Maestro's Quest</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:100%;height:100%;overflow:hidden;background:#060a18;
+  -webkit-user-select:none;user-select:none;
+  -webkit-tap-highlight-color:transparent;touch-action:none;
+  font-family:'Georgia',serif;color:#e2e8f0}
+
+/* ── APP SHELL: PORTRAIT = column (canvas top, controls bottom)
+              LANDSCAPE = row (canvas left, controls right sidebar) ── */
+#shell{
+  position:fixed;inset:0;
+  display:flex;flex-direction:column;
+  background:#060a18}
+
+/* Canvas area fills remaining space */
+#gameArea{
+  flex:1;min-height:0;min-width:0;
+  display:flex;align-items:center;justify-content:center;
+  background:#060a18;overflow:hidden;position:relative}
+
+canvas{display:block;image-rendering:auto}
+
+#tip{
+  position:absolute;pointer-events:none;
+  background:rgba(6,10,24,.97);border-radius:12px;
+  padding:11px 14px;min-width:155px;max-width:200px;
+  text-align:center;z-index:20;display:none;
+  box-shadow:0 8px 28px rgba(0,0,0,.8)}
+
+/* ── PORTRAIT: controls bar at bottom ──────────────────── */
+#ctrlBar{
+  flex-shrink:0;
+  display:flex;flex-direction:row;
+  align-items:center;justify-content:center;
+  gap:clamp(12px,3.5vw,32px);
+  padding:7px 20px calc(7px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(rgba(6,10,24,0),rgba(6,10,24,.88));
+  border-top:1px solid rgba(255,255,255,.05)}
+
+/* ── LANDSCAPE: shell becomes row, ctrlBar becomes right sidebar ── */
+@media (orientation:landscape){
+  #shell{flex-direction:row}
+  #ctrlBar{
+    flex-direction:column;
+    width:clamp(70px,14vw,110px);
+    height:100%;
+    padding:12px calc(env(safe-area-inset-right,0px) + 10px) 12px 10px;
+    border-top:none;
+    border-left:1px solid rgba(255,255,255,.06);
+    background:linear-gradient(90deg,rgba(6,10,24,0),rgba(6,10,24,.88));
+    gap:clamp(10px,2.5vh,22px);
+    justify-content:center}
+  #pcHint{writing-mode:vertical-rl;text-orientation:mixed;padding:4px 0}
+}
+
+/* ── BUTTONS (shared, sizes adapt via clamp) ────────────── */
+.cbtn{
+  touch-action:none;-webkit-tap-highlight-color:transparent;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:50%;cursor:pointer;flex-shrink:0;font-family:sans-serif;
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.04));
+  border:2px solid rgba(255,255,255,.25);color:#e2e8f0;
+  box-shadow:0 4px 14px rgba(0,0,0,.5);
+  transition:transform .08s,opacity .1s}
+.cbtn:active{transform:scale(.86);background:rgba(255,255,255,.2)}
+
+/* Portrait sizes */
+.cbtn{
+  width:clamp(54px,14vw,82px);height:clamp(54px,14vw,82px);
+  font-size:clamp(18px,5vw,30px)}
+
+#cJ{
+  touch-action:none;-webkit-tap-highlight-color:transparent;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border-radius:50%;cursor:pointer;flex-shrink:0;
+  font-weight:bold;letter-spacing:.5px;
+  background:linear-gradient(145deg,rgba(253,224,71,.18),rgba(245,158,11,.08));
+  border:2.5px solid #fde047;color:#fde047;
+  box-shadow:0 0 20px rgba(253,224,71,.22),0 4px 14px rgba(0,0,0,.5);
+  transition:transform .08s}
+#cJ:active{transform:scale(.86)}
+
+/* Portrait jump size */
+#cJ{
+  width:clamp(64px,17vw,96px);height:clamp(64px,17vw,96px)}
+#jArrow{font-size:clamp(16px,5vw,26px);line-height:1}
+#jText{font-size:clamp(8px,2.6vw,12px);letter-spacing:.5px}
+
+/* Landscape: smaller buttons in sidebar */
+@media (orientation:landscape){
+  .cbtn{
+    width:clamp(46px,8vh,68px);height:clamp(46px,8vh,68px);
+    font-size:clamp(16px,3.5vh,24px)}
+  #cJ{
+    width:clamp(54px,10vh,80px);height:clamp(54px,10vh,80px)}
+  #jArrow{font-size:clamp(14px,3.8vh,22px)}
+  #jText{font-size:clamp(7px,1.8vh,11px)}
+}
+
+/* PC hint */
+#pcHint{
+  color:#334155;font-size:11px;letter-spacing:1px;text-align:center;
+  padding:0 0 4px;display:none}
+
+/* ── OVERLAY SCREENS (z-index above everything) ─────────── */
+.scr{
+  position:fixed;inset:0;z-index:300;
+  overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding:16px 14px calc(env(safe-area-inset-bottom,0px) + 16px);
+  display:flex;flex-direction:column;align-items:center}
+.scr.ctr{justify-content:center}
+.hidden{display:none!important}
+
+/* ── BUTTONS ──────────────────────────────────────────────── */
+.btn{
+  border:none;border-radius:10px;font-weight:bold;cursor:pointer;
+  font-family:Georgia,serif;letter-spacing:.3px;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+  transition:transform .1s;display:inline-flex;
+  align-items:center;justify-content:center;gap:6px}
+.btn:active{transform:scale(.93)}
+.bgo{background:linear-gradient(135deg,#fde047,#f59e0b);color:#070b1a;
+  box-shadow:0 4px 18px rgba(253,224,71,.3)}
+.bbl{background:rgba(56,189,248,.1);color:#38bdf8;border:1.5px solid rgba(56,189,248,.32)}
+.bpu{background:rgba(192,132,252,.1);color:#c084fc;border:1.5px solid rgba(192,132,252,.32)}
+.bgr{background:rgba(34,197,94,.1);color:#4ade80;border:1.5px solid rgba(34,197,94,.32)}
+
+/* ── CARDS ──────────────────────────────────────────────── */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));
+  gap:9px;width:100%;max-width:960px}
+.tcard{background:rgba(255,255,255,.05);border-radius:11px;
+  padding:10px 11px;border:1px solid rgba(255,255,255,.08)}
+
+/* ── INFO TABS ──────────────────────────────────────────── */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;
+  margin-bottom:13px;position:sticky;top:0;
+  background:rgba(6,10,24,.97);padding:8px 4px;z-index:10;
+  border-bottom:1px solid rgba(255,255,255,.06);width:100%}
+.tab{padding:6px 12px;border-radius:18px;font-size:11px;font-weight:bold;
+  cursor:pointer;border:1.5px solid rgba(255,255,255,.12);color:#64748b;
+  background:transparent;font-family:Georgia,serif;white-space:nowrap;
+  touch-action:manipulation}
+.tab.on{background:rgba(253,224,71,.12);border-color:#fde047;color:#fde047}
+.pane{display:none;width:100%;max-width:880px}
+.pane.on{display:block}
+
+/* ── SECTION BOXES ──────────────────────────────────────── */
+.box{border-radius:12px;padding:13px 15px;margin-bottom:10px}
+.by{background:rgba(253,224,71,.05);border:1.5px solid rgba(253,224,71,.2)}
+.bb{background:rgba(56,189,248,.05);border:1.5px solid rgba(56,189,248,.2)}
+.br{background:rgba(239,68,68,.05);border:1.5px solid rgba(239,68,68,.2)}
+.bg{background:rgba(34,197,94,.05);border:1.5px solid rgba(34,197,94,.2)}
+.bp{background:rgba(192,132,252,.05);border:1.5px solid rgba(192,132,252,.2)}
+.bw{background:rgba(255,255,255,.03);border:1.5px solid rgba(255,255,255,.08)}
+kbd{background:rgba(255,255,255,.1);border-radius:5px;padding:2px 7px;
+  font-size:11px;font-family:monospace;color:#e2e8f0;border:1px solid rgba(255,255,255,.2)}
+.hdiv{height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);
+  margin:7px 0;width:100%}
+.mcd{background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:13px 17px;cursor:pointer;text-align:center;
+  touch-action:manipulation;transition:all .18s;min-width:120px}
+.mcd:active{transform:scale(.95)}
+.mcd.on{border-color:#fde047;background:rgba(253,224,71,.08)}
+.tog{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.05);
+  padding:12px 16px;border-radius:10px;border:1.5px solid rgba(255,255,255,.1);
+  cursor:pointer;min-width:230px}
+
+/* ── INSTALL SCREEN ─────────────────────────────────────── */
+.instStep{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px}
+.instNum{color:#fde047;font-size:16px;font-weight:bold;flex-shrink:0;margin-top:1px}
+
+/* ── PWA INSTALL BANNER (bottom of start screen) ────────── */
+#installBanner{
+  background:rgba(34,197,94,.08);border:1.5px solid rgba(34,197,94,.25);
+  border-radius:10px;padding:10px 14px;text-align:center;
+  margin-top:10px;width:100%;max-width:360px;display:none}
+</style>
+</head>
+<body>
+
+<!-- ════════ APP SHELL ════════════════════════════════════ -->
+<div id="shell">
+  <!-- CANVAS AREA (top, flex:1) -->
+  <div id="gameArea">
+    <canvas id="cv" width="800" height="450"></canvas>
+    <div id="tip"></div>
+  </div>
+
+  <!-- CONTROLS (bottom, never overlaps canvas) -->
+  <div id="ctrlBar">
+    <button class="cbtn" id="cL" aria-label="Sol">&#9664;</button>
+    <button id="cJ" aria-label="Zıpla">
+      <span id="jArrow">&#8679;</span>
+      <span id="jText">JUMP</span>
+    </button>
+    <button class="cbtn" id="cR" aria-label="Sağ">&#9654;</button>
+  </div>
+  <div id="pcHint">⌨️ ← → hareket &nbsp;·&nbsp; ↑ / Boşluk / W zıpla &nbsp;·&nbsp; Mouse = nota bilgisi</div>
+</div>
+
+<!-- ════════ SCREENS (fixed overlays) ════════════════════ -->
+
+<!-- START -->
+<div id="sStart" class="scr ctr"
+  style="background:radial-gradient(ellipse at 50% 25%,#111d45,#060a18);padding-top:18px;gap:0">
+  <div style="font-size:clamp(2.6rem,8vw,3.4rem);filter:drop-shadow(0 0 20px #38bdf8);margin-bottom:4px">&#127932;</div>
+  <h1 style="color:#fde047;font-size:clamp(18px,5vw,32px);letter-spacing:3px;margin:0 0 3px;
+    text-shadow:0 0 36px rgba(253,224,71,.5);text-align:center">Maestro's Quest</h1>
+  <p style="color:#475569;font-size:10px;letter-spacing:3px;margin:0 0 11px;text-transform:uppercase">
+    MÜZİK TERİMLERİ PLATFORM OYUNU</p>
+  <p style="color:#94a3b8;max-width:360px;text-align:center;line-height:1.72;
+    font-size:clamp(12px,3.4vw,13.5px);margin:0 0 11px">
+    <b style="color:#e2e8f0">106</b> müzik terimi seni bekliyor! &#9834; Notaları topla, güç kazan.<br>
+    <span style="color:#f87171">Düşmanlara</span> dikkat.
+    <span style="color:#22c55e">&#10084;</span><span style="color:#38bdf8">&#128311;</span><span style="color:#fbbf24">&#11088;</span> can verir.
+    <b style="color:#fde047">7 canın</b> var.<br>
+    <span style="color:#eab308">&#8987; 10 dakika</span> — süre dolarsa oyun biter!
+    <span style="color:#eab308">Kum saatlerini</span> topla +30sn kazan.
+  </p>
+  <div id="catGrid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;
+    margin:0 0 10px;width:100%;max-width:360px"></div>
+  <div class="hdiv" style="max-width:360px"></div>
+  <p style="color:#475569;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:8px 0 7px">
+    Kontrol Modu</p>
+  <div style="display:flex;gap:10px;margin:0 0 9px">
+    <div class="mcd on" id="pcCard" onclick="setMode('pc')">
+      <div style="font-size:1.6rem;margin-bottom:3px">&#128187;</div>
+      <div style="color:#e2e8f0;font-weight:bold;font-size:12px">Bilgisayar</div>
+      <div style="color:#64748b;font-size:10px">Klavye</div>
+    </div>
+    <div class="mcd" id="mobCard" onclick="setMode('mob')">
+      <div style="font-size:1.6rem;margin-bottom:3px">&#128241;</div>
+      <div style="color:#e2e8f0;font-weight:bold;font-size:12px">Mobil / Tablet</div>
+      <div style="color:#64748b;font-size:10px">Dokunmatik</div>
+    </div>
+  </div>
+  <div id="modeHint" style="color:#475569;font-size:11px;margin:0 0 11px;text-align:center">
+    ⌨️ ←→ hareket · ↑/Boşluk zıpla
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+    <button class="btn bgo" id="btnStart" style="font-size:15px;padding:12px 36px">&#9834; Oyna!</button>
+    <button class="btn bbl" id="btnRules" style="padding:11px 16px;font-size:13px">&#10067; Kurallar</button>
+    <button class="btn bpu" id="btnInfo" style="padding:11px 16px;font-size:13px">&#128218; Hakkında</button>
+    <button class="btn bgr" id="btnInstall" style="padding:11px 16px;font-size:13px">&#128242; Uygulamaya Al</button>
+    <button class="btn bbl" id="btnSettings" style="padding:11px 14px;font-size:14px">&#9881;</button>
+  </div>
+  <div id="installBanner">
+    <p style="color:#4ade80;font-size:12px;font-weight:bold;margin:0 0 3px">&#128242; Ana Ekrana Ekleyebilirsin!</p>
+    <p style="color:#64748b;font-size:11px;margin:0">"Uygulamaya Al" butonuna bas ve adımları izle.</p>
+  </div>
+</div>
+
+<!-- INSTALL / ADD TO HOME SCREEN -->
+<div id="sInstall" class="scr hidden"
+  style="background:#060a18;padding-top:20px;gap:8px">
+  <div style="text-align:center;flex-shrink:0;margin-bottom:6px">
+    <div style="font-size:2.2rem;filter:drop-shadow(0 0 14px #4ade80)">&#128242;</div>
+    <h1 style="color:#4ade80;font-size:clamp(17px,4vw,24px);letter-spacing:2px;margin:4px 0 2px">
+      Uygulamaya Al</h1>
+    <p style="color:#475569;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 10px">
+      Ana Ekrana Ekle — Ücretsiz, Mağazasız</p>
+  </div>
+  <div style="width:100%;max-width:560px;flex-shrink:0">
+    <!-- iOS -->
+    <div class="box bb" style="margin-bottom:12px">
+      <b style="color:#38bdf8;font-size:13px">&#63743; iPhone / iPad (Safari)</b>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+        <div class="instStep"><span class="instNum">1.</span><div><b style="color:#e2e8f0;font-size:12.5px">Safari ile aç</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Bu HTML dosyasını iPhone veya iPad'de Safari tarayıcısında aç. (Chrome değil, Safari!)</div></div></div>
+        <div class="instStep"><span class="instNum">2.</span><div><b style="color:#e2e8f0;font-size:12.5px">Paylaş butonuna bas</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Ekranın altındaki &#9633; Paylaş simgesine bas (kare + yukarı ok).</div></div></div>
+        <div class="instStep"><span class="instNum">3.</span><div><b style="color:#e2e8f0;font-size:12.5px">"Ana Ekrana Ekle" seç</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Listede "Ana Ekrana Ekle" seçeneğine bas → "Ekle" → Bitti!</div></div></div>
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:9px 11px">
+          <p style="color:#4ade80;font-size:11.5px;margin:0">&#10003; Artık ana ekranda bir uygulama ikonu olarak görünür. Tam ekran, tarayıcı çubuğu olmadan açılır!</p>
+        </div>
+      </div>
+    </div>
+    <!-- Android -->
+    <div class="box bg">
+      <b style="color:#4ade80;font-size:13px">&#129503; Android (Chrome)</b>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+        <div class="instStep"><span class="instNum">1.</span><div><b style="color:#e2e8f0;font-size:12.5px">Chrome ile aç</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Dosyayı Android'de Chrome tarayıcısında aç. Dosya yöneticisinden doğrudan açabilirsin.</div></div></div>
+        <div class="instStep"><span class="instNum">2.</span><div><b style="color:#e2e8f0;font-size:12.5px">Menüyü aç (3 nokta)</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Sağ üstteki ⋮ menüsüne bas.</div></div></div>
+        <div class="instStep"><span class="instNum">3.</span><div><b style="color:#e2e8f0;font-size:12.5px">"Ana Ekrana Ekle" veya "Uygulamayı Yükle"</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Bu seçeneği gör ve bas → Ana ekrana kısayol oluşur.</div></div></div>
+        <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:9px 11px">
+          <p style="color:#4ade80;font-size:11.5px;margin:0">&#10003; Kurulum bitince ana ekranda ikon belirir. Uygulama gibi tam ekran açılır!</p>
+        </div>
+      </div>
+    </div>
+    <!-- PC -->
+    <div class="box by">
+      <b style="color:#fde047;font-size:13px">&#128187; Masaüstü (Chrome / Edge)</b>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+        <div class="instStep"><span class="instNum">1.</span><div><b style="color:#e2e8f0;font-size:12.5px">Adres çubuğunu kontrol et</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">Chrome veya Edge'de adres çubuğunun sağında &#8853; yükleme ikonu belirebilir.</div></div></div>
+        <div class="instStep"><span class="instNum">2.</span><div><b style="color:#e2e8f0;font-size:12.5px">Veya menüden yükle</b><div style="color:#64748b;font-size:11.5px;line-height:1.5;margin-top:2px">⋮ Menü → "Maestro's Quest'i Yükle" → Yükle.</div></div></div>
+        <div style="background:rgba(253,224,71,.06);border:1px solid rgba(253,224,71,.18);border-radius:8px;padding:9px 11px">
+          <p style="color:#94a3b8;font-size:11.5px;margin:0">Not: Yerel dosyada PWA kurulumu çalışmayabilir. En iyi mobil deneyim için iOS Safari veya Android Chrome önerilir.</p>
+        </div>
+      </div>
+    </div>
+    <div class="box bw">
+      <b style="color:#94a3b8;font-size:12px">&#128204; Neden Ana Ekrana Eklemeli?</b>
+      <ul style="color:#64748b;font-size:12px;line-height:1.75;margin:6px 0 0;padding-left:16px">
+        <li>Tarayıcı çubuğu olmadan tam ekran açılır</li>
+        <li>Gerçek uygulama gibi çalışır</li>
+        <li>Hızlı erişim — simgeye tek tıklama</li>
+        <li>İnternet bağlantısı gerekmez (dosya yerel olduğu için)</li>
+      </ul>
+    </div>
+  </div>
+  <div style="display:flex;gap:9px;flex-wrap:wrap;justify-content:center;padding:6px 0 14px;flex-shrink:0">
+    <button class="btn bgo" id="installPlayBtn" style="padding:12px 32px;font-size:15px">&#9834; Oyna!</button>
+    <button class="btn bbl" id="installBackBtn" style="padding:12px 16px;font-size:14px">← Menü</button>
+  </div>
+</div>
+
+<!-- RULES -->
+<div id="sRules" class="scr hidden"
+  style="background:radial-gradient(ellipse at 50% 20%,#0e1a3a,#060a18);padding-top:16px;gap:8px">
+  <div style="text-align:center;flex-shrink:0">
+    <h1 style="color:#fde047;font-size:clamp(16px,4vw,24px);margin:0 0 2px">&#127919; Oyun Kuralları</h1>
+    <p style="color:#475569;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0 0 9px">Nasıl Oynanır?</p>
+  </div>
+  <div style="width:100%;max-width:680px;flex-shrink:0">
+    <div class="box by">
+      <b style="color:#fde047;font-size:13px">&#127919; Amaç</b>
+      <p style="color:#94a3b8;font-size:12.5px;line-height:1.72;margin:6px 0 0">
+        Haritadaki <b style="color:#fde047">106 müzik terimi &#9834;</b> notasını toplayarak
+        <b style="color:#fde047">Maestro</b> unvanını kazan. Her nota güç verir, sonunda sözlük açılır.
+      </p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px">
+      <div class="box bb" style="margin:0">
+        <b style="color:#38bdf8;font-size:12px">&#128187; Bilgisayar</b>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:7px"><kbd>← →</kbd><span style="color:#64748b;font-size:11px">Hareket</span></div>
+          <div style="display:flex;align-items:center;gap:7px"><kbd>A / D</kbd><span style="color:#64748b;font-size:11px">Hareket</span></div>
+          <div style="display:flex;align-items:center;gap:7px"><kbd>↑ W Boş</kbd><span style="color:#64748b;font-size:11px">Zıpla</span></div>
+          <div style="display:flex;align-items:center;gap:7px"><kbd>Mouse</kbd><span style="color:#64748b;font-size:11px">Nota bilgisi</span></div>
+        </div>
+      </div>
+      <div class="box bp" style="margin:0">
+        <b style="color:#c084fc;font-size:12px">&#128241; Mobil/Tablet</b>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+          <div style="display:flex;align-items:center;gap:7px"><kbd>◀ ▶</kbd><span style="color:#64748b;font-size:11px">Hareket</span></div>
+          <div style="display:flex;align-items:center;gap:7px"><kbd style="color:#fde047;border-color:#fde047">JUMP</kbd><span style="color:#64748b;font-size:11px">Zıpla</span></div>
+          <div style="color:#4ade80;font-size:10.5px;margin-top:3px;line-height:1.5;font-weight:bold">📱 Dikey: tuşlar ALTTA<br>🔄 Yatay: tuşlar SAĞDA<br>Oyun alanına hiç binmez!</div>
+        </div>
+      </div>
+    </div>
+    <div class="box br">
+      <b style="color:#f87171;font-size:13px">&#128128; Düşmanlar &amp; Tehlikeler</b>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <div><div style="color:#fca5a5;font-size:12px;font-weight:bold;margin-bottom:2px">&#127926; Nota Yaratıkları</div><div style="color:#64748b;font-size:11px;line-height:1.6"><b style="color:#4ade80">Üstlerine atla</b>=+50 puan. Yandan=1 can.</div></div>
+        <div><div style="color:#fca5a5;font-size:12px;font-weight:bold;margin-bottom:2px">&#128316; Dikenler</div><div style="color:#64748b;font-size:11px;line-height:1.6">Kırmızı üçgenler. Temas=1 can.</div></div>
+        <div><div style="color:#7dd3fc;font-size:12px;font-weight:bold;margin-bottom:2px">&#9889; Dokunulmazlık</div><div style="color:#64748b;font-size:11px;line-height:1.6">Hasar sonrası ~2 sn yanıp söner.</div></div>
+        <div><div style="color:#fca5a5;font-size:12px;font-weight:bold;margin-bottom:2px">&#10084; 7 Can</div><div style="color:#64748b;font-size:11px;line-height:1.6">Tüm canlar bitince oyun biter.</div></div>
+      </div>
+    </div>
+    <div class="box bg">
+      <b style="color:#4ade80;font-size:13px">&#128154; Can Kazanma</b>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:7px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:8px;padding:7px 10px;flex:1;min-width:110px">
+          <span style="font-size:16px">&#10084;&#65039;</span><div><div style="color:#22c55e;font-weight:bold;font-size:11px">+1 Yeşil Kalp</div><div style="color:#475569;font-size:10px">18 adet</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:8px;padding:7px 10px;flex:1;min-width:110px">
+          <span style="font-size:16px">&#128311;</span><div><div style="color:#38bdf8;font-weight:bold;font-size:11px">+2 Mavi Elmas</div><div style="color:#475569;font-size:10px">12 adet</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.2);border-radius:8px;padding:7px 10px;flex:1;min-width:110px">
+          <span style="font-size:16px">&#11088;</span><div><div style="color:#fbbf24;font-weight:bold;font-size:11px">+3 Altın Yıldız</div><div style="color:#475569;font-size:10px">8 adet</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="box bp">
+      <b style="color:#c084fc;font-size:13px">&#9834; Güçler &amp; Puanlama</b>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px">
+        <div style="display:flex;gap:6px;align-items:flex-start"><span>&#128640;</span><div><div style="color:#e2e8f0;font-size:11px;font-weight:bold">Hız Güçleri</div><div style="color:#64748b;font-size:10.5px">Presto→hızlan, Grave→yavaşla</div></div></div>
+        <div style="display:flex;gap:6px;align-items:flex-start"><span>&#10052;</span><div><div style="color:#e2e8f0;font-size:11px;font-weight:bold">Fermata</div><div style="color:#64748b;font-size:10.5px">2.6 sn zaman durur</div></div></div>
+        <div style="display:flex;gap:6px;align-items:flex-start"><span>&#10024;</span><div><div style="color:#e2e8f0;font-size:11px;font-weight:bold">×2/×3 Puan</div><div style="color:#64748b;font-size:10.5px">Coda, Brillante vb.</div></div></div>
+        <div style="display:flex;gap:6px;align-items:flex-start"><span>&#8679;&#8679;</span><div><div style="color:#e2e8f0;font-size:11px;font-weight:bold">Çoklu Zıplama</div><div style="color:#64748b;font-size:10.5px">Arpeggio→3x, Octave→2x</div></div></div>
+      </div>
+    </div>
+    <!-- TIMER BOX -->
+    <div class="box" style="background:rgba(234,179,8,.06);border:1.5px solid rgba(234,179,8,.35);margin-bottom:10px">
+      <b style="color:#eab308;font-size:13px">&#8987; Süre Sistemi — 10 Dakika!</b>
+      <p style="color:#94a3b8;font-size:12px;line-height:1.72;margin:6px 0 8px">
+        Oyunun başladığı anda <b style="color:#fde047">10 dakika</b> sayaç başlar. Tüm 106 terimi
+        bu süre içinde toplamaya çalış! Süre dolduğunda canın olsa bile oyun biter.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(234,179,8,.1);
+          border:1px solid rgba(234,179,8,.28);border-radius:9px;padding:8px 12px;flex:1;min-width:145px">
+          <span style="font-size:20px">&#8987;</span>
+          <div>
+            <div style="color:#eab308;font-weight:bold;font-size:12px">+30 Sn — Kum Saati</div>
+            <div style="color:#475569;font-size:10px;line-height:1.4">10 adet · Mor-altın parlak<br>Haritaya yayılmış</div>
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,.04);border-radius:9px;padding:8px 12px;flex:1;min-width:145px">
+          <div style="color:#f87171;font-size:11px;font-weight:bold;margin-bottom:3px">&#9203; Süre Uyarıları</div>
+          <div style="color:#64748b;font-size:11px;line-height:1.55">
+            60 sn: sayaç <b style="color:#fb923c">turuncuya</b> döner<br>
+            30 sn: sayaç <b style="color:#f87171">kırmızıya</b> döner<br>
+            Son 10 sn: kalp atışı gibi titrer
+          </div>
+        </div>
+      </div>
+      <p style="color:#475569;font-size:10.5px;margin:8px 0 0;text-align:center">
+        &#9454; Minimap'te <b style="color:#eab308">sarı kum saati noktaları</b> görünür — önce onlara koş!
+      </p>
+    </div>
+    <div class="box bw">
+      <b style="color:#94a3b8;font-size:12px">&#9760; HUD</b>&nbsp;
+      <span style="color:#475569;font-size:11px">Sol=Puan · Sağ=Canlar · Orta=İlerleme · Sağ üst=Süre · Alt=Minimap</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:6px 0 12px;flex-shrink:0">
+    <button class="btn bgo" id="rulesPlayBtn" style="padding:11px 30px;font-size:14px">&#9834; Oyna!</button>
+    <button class="btn bbl" id="rulesBackBtn" style="padding:11px 16px;font-size:13px">← Menü</button>
+  </div>
+</div>
+
+<!-- INFO -->
+<div id="sInfo" class="scr hidden" style="background:#060a18;padding-top:13px;gap:0">
+  <div style="text-align:center;flex-shrink:0;margin-bottom:5px">
+    <h1 style="color:#c084fc;font-size:clamp(15px,4vw,22px);letter-spacing:2px;margin:0 0 2px">&#127925; Oyun Hakkında</h1>
+    <p style="color:#475569;font-size:10px;letter-spacing:2px;text-transform:uppercase;margin:0">Ayrıntılı Rehber</p>
+  </div>
+  <div class="tabs">
+    <button class="tab on" onclick="showTab('tMech',this)">⚙️ Mekanik</button>
+    <button class="tab" onclick="showTab('tCat',this)">🎨 Kategoriler</button>
+    <button class="tab" onclick="showTab('tEff',this)">⚡ Güçler</button>
+    <button class="tab" onclick="showTab('tAll',this)">📖 Tüm Terimler</button>
+    <button class="tab" onclick="showTab('tTips',this)">💡 Taktikler</button>
+  </div>
+  <div id="tMech" class="pane on" style="max-width:880px;width:100%">
+    <div class="box by"><b style="color:#fde047;font-size:13px">&#127919; Amaç</b><p style="color:#94a3b8;font-size:12.5px;line-height:1.72;margin:6px 0 0">106 müzik terimi notasını topla, Maestro ol. Her nota toplandığında terimi öğrenirsin ve güç verir. Oyun bitince tüm terimlerin sözlüğü resimlerle açılır.</p></div>
+    <div class="box bb"><b style="color:#38bdf8;font-size:13px">&#127890; Harita — 7400px</b>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+        <div style="display:flex;gap:9px;align-items:center"><div style="width:36px;height:8px;background:#377a2a;border-radius:3px;flex-shrink:0"></div><div><b style="color:#4ade80;font-size:12px">Zemin</b> <span style="color:#64748b;font-size:11.5px">Geniş, en kolay</span></div></div>
+        <div style="display:flex;gap:9px;align-items:center"><div style="width:36px;height:7px;background:#1a3356;border-top:3px solid rgba(56,189,248,.5);border-radius:3px;flex-shrink:0"></div><div><b style="color:#38bdf8;font-size:12px">Orta</b> <span style="color:#64748b;font-size:11.5px">Düşmanlar burada</span></div></div>
+        <div style="display:flex;gap:9px;align-items:center"><div style="width:36px;height:7px;background:#28155a;border-top:3px solid rgba(192,132,252,.4);border-radius:3px;flex-shrink:0"></div><div><b style="color:#c084fc;font-size:12px">Yüksek</b> <span style="color:#64748b;font-size:11.5px">Nadiren dikenli</span></div></div>
+      </div>
+    </div>
+    <div class="box bw"><b style="color:#94a3b8;font-size:13px">&#9889; Güç Süreleri</b><p style="color:#64748b;font-size:12px;line-height:1.7;margin:6px 0 0">Standart: <b style="color:#e2e8f0">6.5 sn</b> · Fermata: <b style="color:#7dd3fc">2.6 sn</b> · Sempre: <b style="color:#fde047">15 sn</b> · Burst: <b style="color:#f87171">0.6 sn</b></p></div>
+    <div class="box br"><b style="color:#f87171;font-size:13px">&#128128; Düşman Sistemi</b>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+        <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:9px 10px"><div style="color:#4ade80;font-size:12px;font-weight:bold;margin-bottom:3px">✓ Doğru</div><div style="color:#64748b;font-size:11px;line-height:1.6">Yaratığın <b>üstüne</b> zıpla → stomp → +50 puan + geri sıçrama</div></div>
+        <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:9px 10px"><div style="color:#f87171;font-size:12px;font-weight:bold;margin-bottom:3px">✗ Yanlış</div><div style="color:#64748b;font-size:11px;line-height:1.6">Yandan çarp → 1 can. Dikene değ → 1 can.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="tCat" class="pane" style="max-width:880px;width:100%"><div id="catContent"></div></div>
+  <div id="tEff" class="pane" style="max-width:880px;width:100%"><div id="effContent" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px"></div></div>
+  <div id="tAll" class="pane" style="max-width:880px;width:100%"><div id="allContent" class="cgrid"></div></div>
+  <div id="tTips" class="pane" style="max-width:880px;width:100%">
+    <div class="box by"><b style="color:#fde047;font-size:13px">&#127942; Taktikler</b>
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:10px">
+        <div style="display:flex;gap:8px"><span style="color:#fde047;flex-shrink:0;font-size:14px">1.</span><div><b style="color:#e2e8f0;font-size:12px">Minimap'i takip et</b><div style="color:#64748b;font-size:11px;margin-top:2px">Sarı=terimler, kırmızı=düşmanlar, mavi=can itemleri.</div></div></div>
+        <div style="display:flex;gap:8px"><span style="color:#fde047;flex-shrink:0;font-size:14px">2.</span><div><b style="color:#e2e8f0;font-size:12px">Altın yıldızlara (+3 can) önce koş</b><div style="color:#64748b;font-size:11px;margin-top:2px">8 adet var. Can yüksekken risk almak kolay.</div></div></div>
+        <div style="display:flex;gap:8px"><span style="color:#fde047;flex-shrink:0;font-size:14px">3.</span><div><b style="color:#e2e8f0;font-size:12px">×3 çarpanda (Brillante) çok nota topla</b><div style="color:#64748b;font-size:11px;margin-top:2px">6.5 saniyen var, yakındaki tüm notaları topla.</div></div></div>
+        <div style="display:flex;gap:8px"><span style="color:#fde047;flex-shrink:0;font-size:14px">4.</span><div><b style="color:#e2e8f0;font-size:12px">Stomp zinciri yap</b><div style="color:#64748b;font-size:11px;margin-top:2px">Bir yaratıktan sıçrayarak diğer yaratığın üstüne düş.</div></div></div>
+        <div style="display:flex;gap:8px"><span style="color:#fde047;flex-shrink:0;font-size:14px">5.</span><div><b style="color:#e2e8f0;font-size:12px">Müzik sesini dinle</b><div style="color:#64748b;font-size:11px;margin-top:2px">Her terim toplandığında karakterini yansıtan ses çıkar.</div></div></div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;padding:7px 0 13px;flex-shrink:0">
+    <button class="btn bgo" id="infoPlayBtn" style="padding:11px 28px;font-size:14px">&#9834; Oyna!</button>
+    <button class="btn bbl" id="infoBackBtn" style="padding:11px 16px;font-size:13px">← Menü</button>
+  </div>
+</div>
+
+<!-- GAMEOVER -->
+<div id="sGameover" class="scr hidden" style="background:rgba(6,10,24,.98);padding-top:16px;gap:7px">
+  <div style="text-align:center;flex-shrink:0">
+    <div style="font-size:clamp(2.6rem,8vw,3.6rem);filter:drop-shadow(0 0 18px #f87171)">&#128128;</div>
+    <h1 style="color:#f87171;font-size:clamp(16px,5vw,28px);margin:4px 0 5px">Oyun Bitti!</h1>
+    <p id="goScore" style="color:#fde047;font-size:19px;font-weight:bold;margin:0 0 3px"></p>
+    <p id="goInfo" style="color:#67e8f9;font-size:12.5px;margin:0 0 11px"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:11px">
+      <button class="btn bgo" id="goRetryBtn" style="padding:10px 24px;font-size:13px">&#128260; Tekrar</button>
+      <button class="btn bbl" id="goRulesBtn" style="padding:10px 14px;font-size:13px">&#10067; Kurallar</button>
+      <button class="btn bbl" id="goSettingsBtn" style="padding:10px 13px;font-size:13px">&#9881;</button>
+    </div>
+  </div>
+  <p style="color:#334155;font-size:10px;letter-spacing:2px;text-transform:uppercase;text-align:center;width:100%;max-width:960px;flex-shrink:0">Topladığın Terimler</p>
+  <div id="goCards" class="cgrid"></div>
+  <div style="height:18px;flex-shrink:0"></div>
+</div>
+
+<!-- WIN -->
+<div id="sWin" class="scr hidden"
+  style="background:radial-gradient(ellipse at 50% 25%,#1a0e50,#060a18);padding-top:16px;gap:7px">
+  <div style="text-align:center;flex-shrink:0">
+    <div style="font-size:clamp(3rem,9vw,4.4rem);filter:drop-shadow(0 0 36px gold)">&#127942;</div>
+    <h1 style="color:#fde047;font-size:clamp(17px,5vw,32px);margin:4px 0 4px;
+      text-shadow:0 0 32px rgba(253,224,71,.6)">Maestro Oldun!</h1>
+    <p style="color:#67e8f9;font-size:14px;margin:0 0 3px">Tüm 106 terimi topladın!</p>
+    <p id="winScore" style="color:#fde047;font-size:23px;font-weight:bold;margin:0 0 11px;
+      text-shadow:0 0 18px rgba(253,224,71,.6)"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:11px">
+      <button class="btn bgo" id="winRetryBtn" style="padding:10px 24px;font-size:13px">&#128260; Tekrar</button>
+      <button class="btn bbl" id="winSettingsBtn" style="padding:10px 13px;font-size:13px">&#9881;</button>
+    </div>
+  </div>
+  <p style="color:#334155;font-size:10px;letter-spacing:2px;text-transform:uppercase;text-align:center;width:100%;max-width:960px;flex-shrink:0">Tüm 106 Müzik Terimi</p>
+  <div id="winCards" class="cgrid"></div>
+  <div style="height:18px;flex-shrink:0"></div>
+</div>
+
+<!-- SETTINGS -->
+<div id="sSettings" class="scr ctr hidden" style="background:rgba(0,0,0,.94)">
+  <div style="background:linear-gradient(145deg,#0d1a3a,#0a1228);border-radius:16px;
+    padding:24px 20px;border:1px solid rgba(56,189,248,.18);width:100%;max-width:300px">
+    <h2 style="color:#fde047;margin:0 0 18px;text-align:center;letter-spacing:2px;font-size:16px">&#9881; Ayarlar</h2>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <label class="tog"><input type="checkbox" id="chkMusic" checked style="width:40px;height:24px;accent-color:#fde047"><span style="font-size:13px">&#127925; Arkaplan Müziği</span></label>
+      <label class="tog"><input type="checkbox" id="chkSfx" checked style="width:40px;height:24px;accent-color:#fde047"><span style="font-size:13px">&#128266; Terim Sesleri &amp; SFX</span></label>
+    </div>
+    <button class="btn bgo" id="settBackBtn" style="width:100%;font-size:14px;padding:11px">← Geri Dön</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ═══════════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════════
+const TERMS=[
+  {id:1,name:"Grave",tr:"Çok yavaş ve ağır",cat:"tempo",eff:"slow",desc:"Hareket yavaşlar 🐌"},
+  {id:2,name:"Largo",tr:"Geniş ve yavaş",cat:"tempo",eff:"slow",desc:"Ağır adımlar"},
+  {id:3,name:"Lento",tr:"Yavaş",cat:"tempo",eff:"slow",desc:"Yavaş mod aktif"},
+  {id:4,name:"Adagio",tr:"Yavaş ve zarif",cat:"tempo",eff:"slow",desc:"Zarif yavaşlık"},
+  {id:5,name:"Andante",tr:"Yürüyüş hızında",cat:"tempo",eff:"normal",desc:"Normal tempo"},
+  {id:6,name:"Andantino",tr:"Andante'den biraz hızlı",cat:"tempo",eff:"normal",desc:"Hafif hızlanma"},
+  {id:7,name:"Moderato",tr:"Orta hızda",cat:"tempo",eff:"normal",desc:"Dengeli tempo"},
+  {id:8,name:"Allegretto",tr:"Biraz canlı",cat:"tempo",eff:"fast",desc:"Adımlar hızlandı ⚡"},
+  {id:9,name:"Allegro",tr:"Hızlı ve canlı",cat:"tempo",eff:"fast",desc:"Hızlı hareket!"},
+  {id:10,name:"Vivace",tr:"Canlı ve hareketli",cat:"tempo",eff:"fast",desc:"Canlı hız!"},
+  {id:11,name:"Presto",tr:"Çok hızlı",cat:"tempo",eff:"superfast",desc:"Süper hız! 🚀"},
+  {id:12,name:"Prestissimo",tr:"Olabildiğince hızlı",cat:"tempo",eff:"superfast",desc:"Maksimum hız!!"},
+  {id:13,name:"Rubato",tr:"Esnek ve serbest tempo",cat:"tempo",eff:"slowmo",desc:"Zaman esner ⏰"},
+  {id:14,name:"Accelerando",tr:"Giderek hızlanma",cat:"tempo",eff:"speedup",desc:"Hızlanıyorsun! 📈"},
+  {id:15,name:"Ritardando",tr:"Giderek yavaşlama",cat:"tempo",eff:"slowdown",desc:"Yavaşlıyorsun 📉"},
+  {id:16,name:"Rallentando",tr:"Yavaşlayarak",cat:"tempo",eff:"slowdown",desc:"Sakin yavaşlama"},
+  {id:17,name:"A tempo",tr:"Normal tempoya dönüş",cat:"tempo",eff:"normal",desc:"Normale döndün"},
+  {id:18,name:"Ritenuto",tr:"Aniden tutarak yavaşlama",cat:"tempo",eff:"brake",desc:"ANİ FREN! 🛑"},
+  {id:19,name:"Pianissimo",tr:"Çok yumuşak (pp)",cat:"dynamic",eff:"stealth",desc:"Gizli mod 👻"},
+  {id:20,name:"Piano",tr:"Yumuşak (p)",cat:"dynamic",eff:"small",desc:"Küçülürsün 🔬"},
+  {id:21,name:"Mezzo-piano",tr:"Orta yumuşak (mp)",cat:"dynamic",eff:"normal",desc:"Hafif yumuşama"},
+  {id:22,name:"Mezzo-forte",tr:"Orta güçlü (mf)",cat:"dynamic",eff:"normal",desc:"Orta güç"},
+  {id:23,name:"Forte",tr:"Güçlü (f)",cat:"dynamic",eff:"strong",desc:"Güçlü atlama! 💪"},
+  {id:24,name:"Fortissimo",tr:"Çok güçlü (ff)",cat:"dynamic",eff:"superstrong",desc:"Süper güç! 🦾"},
+  {id:25,name:"Sforzando",tr:"Ani vurgu (sfz)",cat:"dynamic",eff:"burst",desc:"Patlama! 💥"},
+  {id:26,name:"Fortepiano",tr:"Güçlü sonra yumuşak",cat:"dynamic",eff:"burst",desc:"Ani güç patlaması"},
+  {id:27,name:"Crescendo",tr:"Giderek güçlenme (<<)",cat:"dynamic_change",eff:"speedup",desc:"Güçleniyorsun! 📈"},
+  {id:28,name:"Decrescendo",tr:"Giderek zayıflama (>>)",cat:"dynamic_change",eff:"slowdown",desc:"Yavaşlıyorsun 📉"},
+  {id:29,name:"Diminuendo",tr:"Azalarak zayıflama",cat:"dynamic_change",eff:"slowdown",desc:"Azalarak yavaşlar"},
+  {id:30,name:"Calando",tr:"Yavaşlayıp yumuşayarak",cat:"dynamic_change",eff:"slowdown",desc:"Sakinleşiyorsun"},
+  {id:31,name:"Staccato",tr:"Kısa ve kesik notalar",cat:"articulation",eff:"hop",desc:"Çoklu sıçrama! 🏀"},
+  {id:32,name:"Legato",tr:"Bağlı ve akıcı",cat:"articulation",eff:"glide",desc:"Akıcı kayma 🌊"},
+  {id:33,name:"Tenuto",tr:"Tutularak çalınan nota",cat:"articulation",eff:"stick",desc:"Yavaş düşüş"},
+  {id:34,name:"Marcato",tr:"Vurgulu ve belirgin",cat:"articulation",eff:"strong",desc:"Vurgulu güç 💪"},
+  {id:35,name:"Portato",tr:"Yarı bağlı notalar",cat:"articulation",eff:"glide",desc:"Yarı kayma modu"},
+  {id:36,name:"Tremolo",tr:"Hızlı ses titreşimi",cat:"articulation",eff:"vibrate",desc:"Titreşim! 〰️"},
+  {id:37,name:"Vibrato",tr:"Titrek ses dalgalanması",cat:"articulation",eff:"vibrate",desc:"Titrek hareket"},
+  {id:38,name:"Glissando",tr:"Kaydırma geçişi",cat:"articulation",eff:"slide",desc:"Kayarak ilerle 🎿"},
+  {id:39,name:"Pizzicato",tr:"Teli parmakla çekme",cat:"articulation",eff:"bounce",desc:"Sekme modu 🎾"},
+  {id:40,name:"Spiccato",tr:"Yay sekme tekniği",cat:"articulation",eff:"bounce",desc:"Yerden sek!"},
+  {id:41,name:"Fermata",tr:"Durak işareti (∩)",cat:"notation",eff:"freeze",desc:"ZAMAN DURDU! ❄️"},
+  {id:42,name:"Dal Segno",tr:"İşarete dön (D.S.)",cat:"notation",eff:"burst",desc:"Ani atılım! ⚡"},
+  {id:43,name:"Da Capo",tr:"Başa dön (D.C.)",cat:"notation",eff:"normal",desc:"Denge"},
+  {id:44,name:"Coda",tr:"Son bölüm sembolü (⊕)",cat:"notation",eff:"score2x",desc:"2x Puan! ✨"},
+  {id:45,name:"Legatura",tr:"Bağ işareti (yay)",cat:"notation",eff:"glide",desc:"Bağlı hareket"},
+  {id:46,name:"Overture",tr:"Açılış / giriş müziği",cat:"form",eff:"shield",desc:"Kalkan aktif! 🛡️"},
+  {id:47,name:"Sonata",tr:"3 bölümlü klasik form",cat:"form",eff:"normal",desc:"Denge ve form"},
+  {id:48,name:"Rondo",tr:"Nakarat tekrarlama formu",cat:"form",eff:"bounce",desc:"Döngüsel sekme!"},
+  {id:49,name:"Fugue",tr:"Füg: taklit kontrapunktu",cat:"form",eff:"mirror",desc:"Ayna hareketi 🪞"},
+  {id:50,name:"Canon",tr:"Kanon: peşpeşe taklit",cat:"form",eff:"echo",desc:"Eko etkisi!"},
+  {id:51,name:"Etude",tr:"Teknik çalışma parçası",cat:"form",eff:"speedup",desc:"Beceri artıyor!"},
+  {id:52,name:"Prelude",tr:"Başlangıç / ön parça",cat:"form",eff:"shield",desc:"Koruma kalkanı 🛡️"},
+  {id:53,name:"Interlude",tr:"Bölümler arası müzik",cat:"form",eff:"score2x",desc:"Bonus puan! ✨"},
+  {id:54,name:"Suite",tr:"Dans parçaları serisi",cat:"form",eff:"fast",desc:"Dans ederek hızlan!"},
+  {id:55,name:"Nocturne",tr:"Gece parçası",cat:"form",eff:"stealth",desc:"Gece gizlisi 👻"},
+  {id:56,name:"Scherzo",tr:"Şakacı, oyuncu parça",cat:"form",eff:"bounce",desc:"Şakacı sekme!"},
+  {id:57,name:"Cantabile",tr:"Şarkı söyler gibi",cat:"expression",eff:"float",desc:"Süzülerek uç 🪂"},
+  {id:58,name:"Dolce",tr:"Tatlı ve nazik",cat:"expression",eff:"magnet",desc:"Notaları çek 🧲"},
+  {id:59,name:"Espressivo",tr:"Duygu yüklü ifade",cat:"expression",eff:"score2x",desc:"Duygu = 2x Puan 💫"},
+  {id:60,name:"Grazioso",tr:"Zarif ve narin",cat:"expression",eff:"glide",desc:"Zarif kayma"},
+  {id:61,name:"Giocoso",tr:"Oyuncu ve şakacı",cat:"expression",eff:"bounce",desc:"Oyuncu sekme!"},
+  {id:62,name:"Furioso",tr:"Öfkeli ve fırtınalı",cat:"expression",eff:"rage",desc:"ÖFKE MODU! 🔥"},
+  {id:63,name:"Maestoso",tr:"Görkemli ve heybetli",cat:"expression",eff:"shield",desc:"Görkemli kalkan 🛡️"},
+  {id:64,name:"Misterioso",tr:"Gizemli ve esrarengiz",cat:"expression",eff:"stealth",desc:"Gizemli gizlilik"},
+  {id:65,name:"Agitato",tr:"Ajite ve çalkantılı",cat:"expression",eff:"erratic",desc:"Düzensiz hareket 🌀"},
+  {id:66,name:"Animato",tr:"Canlı ve hareketli",cat:"expression",eff:"fast",desc:"Enerji doldu! ⚡"},
+  {id:67,name:"Appassionato",tr:"Tutkulu ve coşkulu",cat:"expression",eff:"score2x",desc:"Tutku = 2x Puan"},
+  {id:68,name:"Brillante",tr:"Parlak ve gösterişli",cat:"expression",eff:"score3x",desc:"Parlak = 3x Puan 💎"},
+  {id:69,name:"Con fuoco",tr:"Ateşle, ateşli olarak",cat:"expression",eff:"rage",desc:"Ateş modu! 🔥"},
+  {id:70,name:"Con brio",tr:"Coşku ve canlılıkla",cat:"expression",eff:"fast",desc:"Coşkulu hız!"},
+  {id:71,name:"Delicato",tr:"Nazik ve hassas",cat:"expression",eff:"small",desc:"Narin küçülme"},
+  {id:72,name:"Energico",tr:"Enerjik olarak",cat:"expression",eff:"strong",desc:"Enerji patlaması 💪"},
+  {id:73,name:"Grandioso",tr:"Büyük ve görkemli",cat:"expression",eff:"giant",desc:"DEV OLURSUN! 🔷"},
+  {id:74,name:"Gioioso",tr:"Sevinçli ve neşeli",cat:"expression",eff:"magnet",desc:"Neşeli mıknatıs 🧲"},
+  {id:75,name:"Sempre",tr:"Her zaman, daima",cat:"modifier",eff:"permanent",desc:"Kalıcı etki! ♾️"},
+  {id:76,name:"Poco",tr:"Az, biraz",cat:"modifier",eff:"small_boost",desc:"Küçük güç artışı"},
+  {id:77,name:"Molto",tr:"Çok, fazla",cat:"modifier",eff:"big_boost",desc:"Büyük güç artışı! 🔶"},
+  {id:78,name:"Assai",tr:"Oldukça, epey",cat:"modifier",eff:"big_boost",desc:"Epey güçlü!"},
+  {id:79,name:"Piu",tr:"Daha fazla",cat:"modifier",eff:"stack",desc:"Güç yığılıyor! 📚"},
+  {id:80,name:"Meno",tr:"Daha az",cat:"modifier",eff:"slowdown",desc:"Güç azalır"},
+  {id:81,name:"Non troppo",tr:"Fazla abartmadan",cat:"modifier",eff:"normal",desc:"Denge"},
+  {id:82,name:"Subito",tr:"Aniden, birdenbire",cat:"modifier",eff:"burst",desc:"Ani patlama! 💥"},
+  {id:83,name:"Quasi",tr:"Neredeyse, sanki",cat:"modifier",eff:"normal",desc:"Neredeyse normal"},
+  {id:84,name:"Simile",tr:"Aynı şekilde devam",cat:"modifier",eff:"speedup",desc:"Devam ediyor!"},
+  {id:85,name:"Tonic",tr:"Gamın temel tonu (I)",cat:"theory",eff:"heal",desc:"İyileşme noktası 💚"},
+  {id:86,name:"Dominant",tr:"Baskın ton (V. derece)",cat:"theory",eff:"strong",desc:"Baskın güç! 💪"},
+  {id:87,name:"Octave",tr:"8 nota aralığı (oktav)",cat:"theory",eff:"double_jump",desc:"Çift zıplama! ⬆️"},
+  {id:88,name:"Arpeggio",tr:"Akor seslerini ard arda çalma",cat:"theory",eff:"chain_jump",desc:"3 zıplama hakkı! 🔗"},
+  {id:89,name:"Scale",tr:"Gam: düzenli ses dizisi",cat:"theory",eff:"step_up",desc:"Kademeli yükseliş 🪜"},
+  {id:90,name:"Harmony",tr:"Armoni: ses uyumu",cat:"theory",eff:"shield",desc:"Uyum kalkanı 🛡️"},
+  {id:91,name:"Melody",tr:"Ana ezgi çizgisi",cat:"theory",eff:"guide",desc:"Yön rehberi 🗺️"},
+  {id:92,name:"Rhythm",tr:"Ritim: zaman düzeni",cat:"theory",eff:"pulse",desc:"Ritim atışı 💓"},
+  {id:93,name:"Beat",tr:"Temel vuruş birimi",cat:"theory",eff:"pulse",desc:"Nabız hissi 💓"},
+  {id:94,name:"Chord",tr:"Akor: birlikte çalınan sesler",cat:"theory",eff:"burst",desc:"Akor patlaması! 💥"},
+  {id:95,name:"Interval",tr:"İki ses arası mesafe",cat:"theory",eff:"double_jump",desc:"Aralık sıçraması! ⬆️"},
+  {id:96,name:"Timbre",tr:"Ses rengi / tınısı",cat:"theory",eff:"color",desc:"Renk değişimi 🌈"},
+  {id:97,name:"Counterpoint",tr:"Karşı nokta tekniği",cat:"theory",eff:"mirror",desc:"Ayna hareketi 🪞"},
+  {id:98,name:"Modulation",tr:"Bir tondan diğerine geçiş",cat:"theory",eff:"transform",desc:"Dönüşüm! 🔄"},
+  {id:99,name:"Cadence",tr:"Bitiş kalıbı / sona eriş",cat:"theory",eff:"heal",desc:"İyileşme 💚"},
+  {id:100,name:"Syncopation",tr:"Zayıf vuruşa vurgu",cat:"theory",eff:"bounce",desc:"Senkop sıçrama! 🏀"},
+  {id:101,name:"Dissonance",tr:"Ses uyumsuzluğu",cat:"theory",eff:"erratic",desc:"Düzensiz hareket 💨"},
+  {id:102,name:"Consonance",tr:"Ses uyumu ve ahenk",cat:"theory",eff:"heal",desc:"Uyumlu iyileşme 💚"},
+  {id:103,name:"Polyphony",tr:"Çok seslilik",cat:"theory",eff:"chain_jump",desc:"Çoklu zıplama! 🌟"},
+  {id:104,name:"Monophony",tr:"Tek seslilik",cat:"theory",eff:"fast",desc:"Tek ses = odak! 🎯"},
+  {id:105,name:"Homophony",tr:"Ana sesli çok seslilik",cat:"theory",eff:"shield",desc:"Liderlik kalkanı 👑"},
+  {id:106,name:"Ostinato",tr:"Tekrarlayan müzik motifi",cat:"theory",eff:"bounce",desc:"Tekrarlayan sekme! 🔁"},
+];
+const CC={tempo:"#38bdf8",dynamic:"#fb923c",dynamic_change:"#f87171",
+  articulation:"#4ade80",notation:"#c084fc",form:"#f472b6",
+  expression:"#fde047",theory:"#67e8f9",modifier:"#a8a29e"};
+const CTR={tempo:"Tempo",dynamic:"Dinamik",dynamic_change:"Dinamik Değişim",
+  articulation:"Artikülasyon",notation:"Notasyon",form:"Form",
+  expression:"İfade",theory:"Müzik Teorisi",modifier:"Niteleyici"};
+const CDESC={
+  tempo:"Parçanın hızını belirler. Grave (çok yavaş) ile Prestissimo (olabildiğince hızlı) arasında geniş skala.",
+  dynamic:"Sesin şiddetini belirtir. pp (çok yumuşak) ile ff (çok güçlü) arasındaki aralık.",
+  dynamic_change:"Sesin giderek değişimini gösterir. Crescendo (<<) büyüme, Decrescendo (>>) küçülme.",
+  articulation:"Notaların nasıl çalınacağını belirtir: Staccato=kesik, Legato=bağlı, Vibrato=titrek.",
+  notation:"Müzik yazısındaki özel işaretler: Fermata=durak, Dal Segno=işarete dön, Coda=son bölüm.",
+  form:"Yapıtın bölüm yapısını tanımlar: Sonata, Rondo, Füg, Suite gibi büyük formlar.",
+  expression:"Duygusal karakteri belirtir: Furioso=öfkeli, Dolce=tatlı, Maestoso=görkemli.",
+  theory:"Müziğin temel yapı taşları: Akor, armoni, ritim, melodi, arpej, gam gibi kavramlar.",
+  modifier:"Diğer terimlerin anlamını değiştirir: Molto=çok, Poco=az, Sempre=her zaman.",
+};
+const CSVG={
+  tempo:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><rect x="25" y="56" width="40" height="10" rx="2" fill="#1e3a5a" stroke="#38bdf8" stroke-width="1.5"/><polygon points="45,6 62,56 28,56" fill="none" stroke="#38bdf8" stroke-width="2"/><circle cx="45" cy="60" r="3" fill="#38bdf8"/><line x1="45" y1="55" x2="58" y2="22" stroke="#fde047" stroke-width="2"/><circle cx="58" cy="20" r="3.5" fill="#fde047"/><text x="45" y="48" text-anchor="middle" font-size="8" fill="#38bdf8" font-family="monospace">♩=92</text></svg>`,
+  dynamic:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><line x1="8" y1="28" x2="82" y2="28" stroke="#475569" stroke-width="0.7"/><line x1="8" y1="36" x2="82" y2="36" stroke="#475569" stroke-width="0.7"/><line x1="8" y1="44" x2="82" y2="44" stroke="#475569" stroke-width="0.7"/><line x1="8" y1="52" x2="82" y2="52" stroke="#475569" stroke-width="0.7"/><line x1="8" y1="60" x2="82" y2="60" stroke="#475569" stroke-width="0.7"/><text x="12" y="24" font-size="11" fill="#fb923c" font-style="italic" font-family="serif">pp</text><text x="38" y="24" font-size="11" fill="#fb923c" font-style="italic" font-family="serif">mf</text><text x="64" y="24" font-size="11" fill="#fb923c" font-style="italic" font-family="serif">ff</text><text x="20" y="48" font-size="20" fill="#fb923c" font-family="serif">♩</text><text x="52" y="40" font-size="22" fill="#fb923c" font-family="serif">♩</text></svg>`,
+  dynamic_change:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><line x1="8" y1="34" x2="82" y2="34" stroke="#475569" stroke-width="0.8"/><path d="M10,34 L44,26 L10,18" fill="none" stroke="#f87171" stroke-width="2"/><path d="M46,26 L80,34 L46,42" fill="none" stroke="#f87171" stroke-width="2"/><text x="6" y="64" font-size="9" fill="#f87171" font-family="Georgia">cresc.</text><text x="50" y="64" font-size="9" fill="#f87171" font-family="Georgia">decresc.</text></svg>`,
+  articulation:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><line x1="8" y1="36" x2="82" y2="36" stroke="#475569" stroke-width="0.8"/><line x1="8" y1="44" x2="82" y2="44" stroke="#475569" stroke-width="0.8"/><line x1="8" y1="52" x2="82" y2="52" stroke="#475569" stroke-width="0.8"/><text x="10" y="44" font-size="16" fill="#4ade80" font-family="serif">♩</text><circle cx="18" cy="31" r="2.5" fill="#4ade80"/><text x="38" y="44" font-size="16" fill="#4ade80" font-family="serif">♩</text><path d="M36,30 Q50,22 64,30" fill="none" stroke="#4ade80" stroke-width="2"/><text x="62" y="44" font-size="16" fill="#4ade80" font-family="serif">♩</text><text x="68" y="32" font-size="12" fill="#4ade80">^</text></svg>`,
+  notation:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><ellipse cx="30" cy="36" rx="16" ry="11" fill="none" stroke="#c084fc" stroke-width="2"/><line x1="30" y1="25" x2="30" y2="16" stroke="#c084fc" stroke-width="2"/><line x1="24" y1="16" x2="36" y2="16" stroke="#c084fc" stroke-width="2.5"/><circle cx="30" cy="16" r="2" fill="#c084fc"/><text x="65" y="30" text-anchor="middle" font-size="14" fill="#c084fc" font-style="italic" font-family="serif">D.S.</text><text x="65" y="48" text-anchor="middle" font-size="12" fill="#c084fc">⊕</text></svg>`,
+  form:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><rect x="4" y="22" width="22" height="18" rx="3" fill="rgba(244,114,182,.15)" stroke="#f472b6" stroke-width="1.5"/><text x="15" y="35" text-anchor="middle" font-size="11" fill="#f472b6" font-family="Georgia,serif" font-weight="bold">A</text><rect x="34" y="22" width="22" height="18" rx="3" fill="rgba(244,114,182,.1)" stroke="#f472b6" stroke-width="1.5"/><text x="45" y="35" text-anchor="middle" font-size="11" fill="#f472b6" font-family="Georgia,serif" font-weight="bold">B</text><rect x="64" y="22" width="22" height="18" rx="3" fill="rgba(244,114,182,.15)" stroke="#f472b6" stroke-width="1.5"/><text x="75" y="35" text-anchor="middle" font-size="11" fill="#f472b6" font-family="Georgia,serif" font-weight="bold">A</text><line x1="26" y1="31" x2="34" y2="31" stroke="#f472b6" stroke-width="1.2"/><line x1="56" y1="31" x2="64" y2="31" stroke="#f472b6" stroke-width="1.2"/><text x="45" y="55" text-anchor="middle" font-size="8" fill="#f472b6" font-family="Georgia">ABA Form</text></svg>`,
+  expression:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><text x="6" y="22" font-size="9" fill="#fde047" font-style="italic" font-family="Georgia,serif">Furioso</text><text x="6" y="36" font-size="9" fill="#fde047" font-style="italic" font-family="Georgia,serif">Dolce</text><text x="6" y="50" font-size="9" fill="#fde047" font-style="italic" font-family="Georgia,serif">Maestoso</text><path d="M55,16 Q65,10 75,16 Q85,22 75,28 Q65,34 55,28 Q45,22 55,16" fill="none" stroke="#fde047" stroke-width="1.5"/><text x="65" y="55" text-anchor="middle" font-size="18" fill="#fde047">♩</text></svg>`,
+  theory:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><line x1="8" y1="20" x2="82" y2="20" stroke="#475569" stroke-width="0.8"/><line x1="8" y1="28" x2="82" y2="28" stroke="#475569" stroke-width="0.8"/><line x1="8" y1="36" x2="82" y2="36" stroke="#475569" stroke-width="0.8"/><line x1="8" y1="44" x2="82" y2="44" stroke="#475569" stroke-width="0.8"/><line x1="8" y1="52" x2="82" y2="52" stroke="#475569" stroke-width="0.8"/><text x="8" y="50" font-size="28" fill="#67e8f9" font-family="serif">𝄞</text><ellipse cx="44" cy="44" rx="5" ry="3.5" fill="#67e8f9"/><line x1="49" y1="44" x2="49" y2="24" stroke="#67e8f9" stroke-width="1.5"/><ellipse cx="60" cy="36" rx="5" ry="3.5" fill="#67e8f9"/><line x1="65" y1="36" x2="65" y2="16" stroke="#67e8f9" stroke-width="1.5"/><ellipse cx="76" cy="28" rx="5" ry="3.5" fill="#67e8f9"/><line x1="81" y1="28" x2="81" y2="8" stroke="#67e8f9" stroke-width="1.5"/></svg>`,
+  modifier:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 68"><text x="45" y="20" text-anchor="middle" font-size="10" fill="#a8a29e" font-style="italic" font-family="Georgia,serif">molto</text><line x1="10" y1="30" x2="78" y2="30" stroke="#a8a29e" stroke-width="1.5"/><polygon points="78,30 71,26 71,34" fill="#a8a29e"/><text x="45" y="46" text-anchor="middle" font-size="10" fill="#a8a29e" font-style="italic" font-family="Georgia,serif">poco</text><line x1="80" y1="56" x2="12" y2="56" stroke="#a8a29e" stroke-width="1"/><polygon points="12,56 19,52 19,60" fill="#a8a29e"/></svg>`,
+};
+const EDESC={slow:"Hareket hızı azalır",superfast:"Maksimum hıza ulaşırsın",fast:"Hız belirgin artar",stealth:"Karakter görünmez olur",small:"Karakter küçülür",strong:"Güç ve atlama artar",superstrong:"Devasa atlama gücü",burst:"Ani fırlatma etkisi",speedup:"Giderek artan hız",slowdown:"Giderek azalan hız",hop:"3 kez art arda zıplama",glide:"Kaygan süzülen hareket",stick:"Yavaş düşme",vibrate:"Titrek salınan pozisyon",slide:"Kaydırarak süzülme",bounce:"Zeminden sürekli sekme",freeze:"2.6 sn her şey durur",shield:"Altın koruma kalkanı",mirror:"Hareketler ters döner",echo:"Eko yankı etkisi",float:"Hafif yerçekimi",magnet:"Yakın notalar çekilir",score2x:"Puanlar 2 katına çıkar",score3x:"Puanlar 3 katına çıkar",giant:"Karakter devleşir",chain_jump:"3 kez üst üste zıplama",double_jump:"Havada ikinci zıplama",heal:"+1 can kazanırsın",pulse:"Güçlü yukarı atış",rage:"Çok hızlı agresif hareket",erratic:"Düzensiz hareket",slowmo:"Yarı hızda esnek hareket",brake:"Ani sert frenleme",color:"Gökkuşağı renk döngüsü",step_up:"Basamak yükseliş",permanent:"15 sn kalıcı etki",small_boost:"Küçük yukarı fırlatma",big_boost:"Güçlü yukarı fırlatma",stack:"Puan çarpanı +1 artar",guide:"Yön rehberi aktif",normal:"Normal mod",transform:"Güç dönüşümü"};
+function ei(e){const m={slow:"🐌",superfast:"🚀",fast:"⚡",stealth:"👻",small:"🔬",strong:"💪",superstrong:"🦾",burst:"💥",speedup:"📈",slowdown:"📉",hop:"🏀",glide:"🌊",stick:"🏔️",vibrate:"〰️",slide:"🎿",bounce:"🎾",freeze:"❄️",shield:"🛡️",mirror:"🪞",echo:"📢",float:"🪂",magnet:"🧲",score2x:"✨",score3x:"💎",giant:"🔷",chain_jump:"🔗",double_jump:"⬆️",heal:"💚",pulse:"💓",rage:"🔥",erratic:"🌀",slowmo:"⏰",brake:"🛑",color:"🌈",step_up:"🪜",permanent:"♾️",small_boost:"🔹",big_boost:"🔶",stack:"📚",guide:"🗺️",normal:"▶️",transform:"🔄"};return m[e]||"✨";}
+
+// ── Build info content ────────────────────────────────────
+function buildInfo(){
+  // Categories tab
+  const catEl=document.getElementById('catContent');
+  Object.entries(CC).forEach(([cat,col])=>{
+    const ts=TERMS.filter(t=>t.cat===cat);
+    catEl.innerHTML+=`<div class="box" style="background:${col}06;border:1.5px solid ${col}20;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+        <div style="width:34px;height:25px;flex-shrink:0;border-radius:5px;overflow:hidden;border:1px solid ${col}28;background:rgba(0,0,0,.3)">${CSVG[cat]||''}</div>
+        <b style="color:${col};font-size:13px">${CTR[cat]}</b><span style="color:#475569;font-size:10px">(${ts.length} terim)</span>
+      </div>
+      <p style="color:#64748b;font-size:11.5px;line-height:1.6;margin:0 0 8px">${CDESC[cat]}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">${ts.map(t=>`<span style="background:${col}12;border:1px solid ${col}24;border-radius:16px;padding:3px 9px;font-size:10.5px;color:${col};font-family:Georgia,serif">${t.name}</span>`).join('')}</div>
+    </div>`;
+  });
+  // Effects tab
+  const effEl=document.getElementById('effContent');
+  const effs=[...new Set(TERMS.map(t=>t.eff))].sort();
+  effEl.innerHTML=effs.map(e=>`<div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:9px;padding:9px 11px">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span style="font-size:16px">${ei(e)}</span><b style="color:#e2e8f0;font-size:11.5px">${e}</b></div>
+    <div style="color:#64748b;font-size:11px;line-height:1.45;margin-bottom:4px">${EDESC[e]||'Özel etki'}</div>
+    <div style="color:#334155;font-size:9.5px">${TERMS.filter(t=>t.eff===e).map(t=>t.name).join(', ')}</div>
+  </div>`).join('');
+  // All terms tab
+  const allEl=document.getElementById('allContent');
+  allEl.innerHTML=TERMS.map(t=>{const c=CC[t.cat]||'#fff';return`<div class="tcard" style="border-color:${c}22">
+    <div style="display:flex;align-items:flex-start;gap:7px;margin-bottom:5px">
+      <div style="width:30px;height:22px;flex-shrink:0;border-radius:4px;overflow:hidden;border:1px solid ${c}22;background:rgba(0,0,0,.3)">${CSVG[t.cat]||''}</div>
+      <div style="flex:1;min-width:0"><div style="color:${c};font-weight:bold;font-size:12px;font-family:Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name}</div><div style="color:#334155;font-size:9px;text-transform:uppercase;letter-spacing:.7px">${CTR[t.cat]}</div></div>
+      <span style="font-size:14px;flex-shrink:0">${ei(t.eff)}</span>
+    </div>
+    <div style="color:#e2e8f0;font-size:11px;margin-bottom:3px;line-height:1.35">${t.tr}</div>
+    <div style="color:${c};font-size:10px;font-weight:bold">${t.desc}</div>
+  </div>`;}).join('');
+}
+buildInfo();
+
+// Category grid on start screen
+const cgEl=document.getElementById('catGrid');
+Object.entries(CC).forEach(([cat,col])=>{
+  cgEl.innerHTML+=`<div style="display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.04);padding:5px 7px;border-radius:7px;border:1px solid ${col}24">
+    <div style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 5px ${col};flex-shrink:0"></div>
+    <span style="color:#64748b;font-size:9.5px">${CTR[cat]}</span></div>`;
+});
+
+// ═══════════════════════════════════════════════
+// PWA SETUP
+// ═══════════════════════════════════════════════
+(function setupPWA(){
+  // SVG icon as data URI
+  const iconSVG=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="80" fill="#060a18"/><text y="360" x="256" text-anchor="middle" font-size="300" font-family="serif">🎼</text></svg>`;
+  const iconURL='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(iconSVG);
+  // Apple touch icon
+  document.getElementById('touchIcon').href=iconURL;
+  // Manifest via blob
+  const manifest={
+    name:"Maestro's Quest",short_name:"Maestro",
+    description:"Müzik Terimleri Platform Oyunu",
+    start_url:".",display:"fullscreen",orientation:"any",
+    background_color:"#060a18",theme_color:"#060a18",
+    icons:[{src:iconURL,sizes:"any",type:"image/svg+xml"}]
+  };
+  try{
+    const blob=new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'});
+    document.getElementById('manifestLink').href=URL.createObjectURL(blob);
+  }catch(e){}
+  // Service worker via blob (best effort)
+  if('serviceWorker' in navigator){
+    const sw=`self.addEventListener('fetch',e=>e.respondWith(fetch(e.request).catch(()=>caches.match(e.request))));`;
+    try{
+      const swBlob=new Blob([sw],{type:'application/javascript'});
+      navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(()=>{});
+    }catch(e){}
+  }
+  // Show banner if mobile
+  if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){
+    document.getElementById('installBanner').style.display='block';
+  }
+})();
+
+// ═══════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════
+const Aud=(function(){
+  let ac=null,mg=null,sg=null,loop=false,lt=null,bt=0,mon=true,son=true;
+  function init(){if(ac)return;try{ac=new(window.AudioContext||window.webkitAudioContext)();const m=ac.createGain();m.gain.value=.48;m.connect(ac.destination);mg=ac.createGain();mg.gain.value=.22;mg.connect(m);sg=ac.createGain();sg.gain.value=.6;sg.connect(m);}catch(e){}}
+  function n(f,d,t,v){if(!ac)return;const o=ac.createOscillator(),g=ac.createGain();o.type=t||'sine';o.frequency.value=f;g.gain.setValueAtTime(v||.18,ac.currentTime);g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+d);o.connect(g);g.connect(sg);o.start();o.stop(ac.currentTime+d+.05);}
+  function gl(f1,f2,d,t,v){if(!ac)return;const o=ac.createOscillator(),g=ac.createGain();o.type=t||'sine';o.frequency.setValueAtTime(f1,ac.currentTime);o.frequency.linearRampToValueAtTime(f2,ac.currentTime+d);g.gain.setValueAtTime(v||.14,ac.currentTime);g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+d);o.connect(g);g.connect(sg);o.start();o.stop(ac.currentTime+d+.05);}
+  function ch(fs,d,t,v){if(!ac)return;fs.forEach((f,i)=>setTimeout(()=>n(f,d,t,v),i*28));}
+  function termSound(term){if(!son||!ac)return;const e=term.eff;
+    if(e==='slow')n(220,.85,'triangle',.13);else if(e==='brake')gl(440,110,.4,'sawtooth',.2);else if(e==='slowmo')gl(660,330,.7,'triangle',.12);else if(e==='slowdown')gl(880,220,.5,'sine',.13);else if(e==='speedup')gl(220,880,.4,'sine',.14);else if(e==='superfast')[880,1100,1320,1760].forEach((f,i)=>setTimeout(()=>n(f,.04,'square',.11),i*22));else if(e==='fast')[660,880,1100].forEach((f,i)=>setTimeout(()=>n(f,.07,'square',.11),i*38));else if(e==='hop')[440,440,440].forEach((f,i)=>setTimeout(()=>n(f,.05,'square',.14),i*105));else if(e==='glide')gl(330,660,.38,'sine',.17);else if(e==='slide')gl(880,220,.42,'sine',.16);else if(e==='vibrate'){if(!ac)return;const o=ac.createOscillator(),g=ac.createGain(),lfo=ac.createOscillator(),lg=ac.createGain();o.type='sine';o.frequency.value=440;lfo.type='sine';lfo.frequency.value=9;lg.gain.value=.1;lfo.connect(lg);lg.connect(g.gain);g.gain.setValueAtTime(.14,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.65);o.connect(g);g.connect(sg);o.start();lfo.start();o.stop(ac.currentTime+.7);lfo.stop(ac.currentTime+.7);}else if(e==='bounce')[550,440,550].forEach((f,i)=>setTimeout(()=>n(f,.09,'triangle',.15),i*88));else if(e==='freeze')[880,1320,1760].forEach((f,i)=>setTimeout(()=>n(f,.55,'sine',.09),i*75));else if(e==='shield')ch([523,659,784],.5,'triangle',.08);else if(e==='burst'){n(200,.08,'sawtooth',.26);setTimeout(()=>n(100,.22,'sawtooth',.14),70);}else if(e==='rage')ch([220,233,247],.28,'sawtooth',.08);else if(e==='float')[880,1100,880].forEach((f,i)=>setTimeout(()=>n(f,.32,'sine',.06),i*145));else if(e==='magnet'){gl(220,880,.15,'sine',.14);setTimeout(()=>gl(880,440,.28,'sine',.11),150);}else if(e==='score2x')ch([523,659],.25,'sine',.13);else if(e==='score3x')[523,659,784].forEach((f,i)=>setTimeout(()=>n(f,.22,'sine',.13),i*95));else if(e==='giant'){n(55,.85,'triangle',.18);n(110,.65,'triangle',.11);}else if(e==='heal')[523,659,784,1047].forEach((f,i)=>setTimeout(()=>n(f,.22,'sine',.12),i*75));else if(e==='double_jump')[440,880].forEach((f,i)=>setTimeout(()=>n(f,.15,'sine',.14),i*100));else if(e==='chain_jump')[440,660,880].forEach((f,i)=>setTimeout(()=>n(f,.14,'sine',.12),i*80));else if(e==='stack')[330,440,523,659,784].forEach((f,i)=>setTimeout(()=>n(f,.1,'triangle',.11),i*55));else if(e==='color')[523,554,587,622,659].forEach((f,i)=>setTimeout(()=>n(f,.1,'sine',.1),i*48));else if(e==='transform'){n(440,.1,'sawtooth',.14);setTimeout(()=>ch([523,659,784],.32,'triangle',.09),100);}else if(e==='big_boost'){n(330,.15,'triangle',.18);setTimeout(()=>n(660,.28,'triangle',.14),80);}else if(e==='step_up')[330,440,523,659,784].forEach((f,i)=>setTimeout(()=>n(f,.1,'sine',.09),i*58));else if(e==='pulse'){n(110,.1,'triangle',.2);setTimeout(()=>n(110,.1,'triangle',.17),200);}else if(e==='strong')ch([220,330],.2,'sawtooth',.11);else if(e==='superstrong')ch([110,220,330],.25,'sawtooth',.1);else if(e==='stealth')n(880,.45,'sine',.04);else if(e==='mirror')[440,440].forEach((f,i)=>setTimeout(()=>n(f,.16,'sine',.13-i*.05),i*190));else if(e==='echo')[660,550,440,330].forEach((f,i)=>setTimeout(()=>n(f,.13,'sine',.11-i*.02),i*140));else n(523,.18,'sine',.11);}
+  function jump(){if(!son||!ac)return;n(370,.08,'square',.17);setTimeout(()=>n(520,.07,'sine',.09),55);}
+  function hurt(){if(!son||!ac)return;n(200,.25,'sawtooth',.27);setTimeout(()=>n(140,.35,'sawtooth',.17),90);}
+  function stomp(){if(!son||!ac)return;n(300,.07,'square',.19);setTimeout(()=>n(100,.17,'sawtooth',.11),55);}
+  function spike(){if(!son||!ac)return;n(160,.28,'square',.28);}
+  function gameover(){if(!son||!ac)return;[440,370,294,220,147].forEach((f,i)=>setTimeout(()=>n(f,.4,'sawtooth',.21),i*120));}
+  function win(){if(!son||!ac)return;[523,659,784,880,1047].forEach((f,i)=>setTimeout(()=>n(f,.25,'sine',.24),i*80));}
+  function healSfx(a){if(!son||!ac)return;const fs=a>=3?[523,659,784,1047]:a>=2?[523,659,784]:[523,659];fs.forEach((f,i)=>setTimeout(()=>n(f,.22,'sine',.15),i*72));}
+  function timeBonusSfx(){if(!son||!ac)return;
+    // Rising arpeggio + clock tick feel: bright and distinctive
+    [880,1108,1318,1760].forEach((f,i)=>setTimeout(()=>n(f,.18,'sine',.16),i*60));
+    setTimeout(()=>n(2093,.35,'sine',.12),280);}
+  const BASS=[110,130.81,146.83,164.81,196],MID=[220,261.63,293.66,329.63,392],HIGH=[440,523.25,587.33,659.25,784];
+  const PATS=[[0,2,4,2,1,3,4,3],[0,4,2,4,0,2,1,2],[2,4,3,4,2,1,0,1],[0,1,3,4,3,1,2,4]];
+  function sn(f,d,dur,t,v){if(!ac||!mon)return;setTimeout(()=>{if(!loop||!mon)return;const o=ac.createOscillator(),g=ac.createGain();o.type=t||'sine';o.frequency.value=f;g.gain.setValueAtTime(0,ac.currentTime);g.gain.linearRampToValueAtTime(v,ac.currentTime+.02);g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+dur);o.connect(g);g.connect(mg);o.start();o.stop(ac.currentTime+dur+.05);},d);}
+  function bar(){if(!loop||!mon)return;const B=60000/92,pat=PATS[bt%PATS.length];sn(BASS[0],0,B*1.8*.001,'triangle',.12);sn(BASS[2],B*2,B*1.8*.001,'triangle',.09);pat.forEach((p,i)=>sn(MID[p%5],i*(B*.5),B*.4*.001,'sine',.06));sn(HIGH[pat[0]%5],0,B*.6*.001,'sine',.045);sn(HIGH[pat[4]%5],B*2,B*.6*.001,'sine',.035);if(bt%2===0)sn(HIGH[4],B,B*.3*.001,'sine',.025);bt++;lt=setTimeout(bar,B*4);}
+  function startMusic(){if(!mon||!ac||loop)return;loop=true;bt=0;bar();}
+  function stopMusic(){loop=false;if(lt)clearTimeout(lt);}
+  function setMusic(v){mon=v;if(!v)stopMusic();else if(ac&&!loop)startMusic();if(mg)mg.gain.value=v?.22:0;}
+  function setSfx(v){son=v;}
+  function resume(){if(ac&&ac.state==='suspended')ac.resume();}
+  return{init,termSound,jump,hurt,stomp,spike,gameover,win,healSfx,timeBonusSfx,startMusic,stopMusic,setMusic,setSfx,resume};
+})();
+
+// ═══════════════════════════════════════════════
+// LEVEL GEN
+// ═══════════════════════════════════════════════
+const GW=800,GH=450,LW=7400;
+function makePlats(){const p=[];
+  [[0,700],[780,1480],[1560,2260],[2340,3040],[3120,3820],[3900,4600],[4680,5380],[5460,6160],[6240,6940],[7020,7400]].forEach(([x1,x2])=>p.push({x:x1,y:415,w:x2-x1,h:35,t:'g'}));
+  [[80,325,140],[270,275,120],[450,345,110],[620,290,130],[790,315,110],[880,285,120],[1040,325,130],[1200,270,110],[1380,310,100],[1600,335,130],[1770,285,110],[1950,315,120],[2120,270,110],[2280,305,100],[2380,340,120],[2560,280,130],[2730,315,110],[2900,270,100],[3060,310,120],[3160,340,110],[3340,280,130],[3510,310,110],[3680,265,100],[3850,305,120],[3940,330,110],[4120,275,130],[4300,315,110],[4470,265,100],[4640,310,120],[4720,335,110],[4900,275,130],[5080,315,110],[5250,265,100],[5420,305,120],[5500,330,110],[5680,275,130],[5860,310,110],[6030,265,100],[6200,305,120],[6280,330,110],[6460,275,130],[6640,310,110],[6810,265,100],[6980,305,120],[7060,330,110],[7200,275,130],[7340,310,110]].forEach(([x,y,w])=>p.push({x,y,w,h:14,t:'m'}));
+  [[40,210,90],[220,180,80],[400,215,95],[580,185,85],[760,210,95],[900,180,80],[1060,215,90],[1230,185,80],[1400,210,90],[1620,225,95],[1800,185,80],[1980,215,90],[2150,185,95],[2310,215,80],[2420,230,90],[2600,190,80],[2780,215,95],[2960,185,85],[3120,210,80],[3200,225,95],[3380,190,80],[3560,215,90],[3740,185,95],[3920,210,80],[4000,225,95],[4180,190,80],[4360,215,90],[4540,185,95],[4720,210,80],[4780,225,90],[4960,190,80],[5140,215,95],[5320,185,85],[5500,210,80],[5560,225,90],[5740,190,80],[5920,215,90],[6100,185,95],[6280,210,80],[6340,225,90],[6520,190,80],[6700,215,90],[6880,185,95],[7060,210,80],[7120,225,90],[7280,190,80]].forEach(([x,y,w])=>p.push({x,y,w,h:12,t:'h'}));
+  return p;}
+const ALLP=makePlats();
+function makePickups(){const u=ALLP.filter(p=>p.w>=75);return TERMS.map((t,i)=>{const pl=u[i%u.length],off=((i*37)%Math.max(1,pl.w-55));return{...t,px:pl.x+28+off,py:pl.y-30,col:false};});}
+function makeEnemies(){const e=[],mp=ALLP.filter(p=>p.t==='m'&&p.w>=90);mp.forEach((pl,i)=>{if(i%3!==1)return;e.push({x:pl.x+20,y:pl.y-24,w:20,h:22,vx:1.4+(i%3)*.3,px:pl.x,pw:pl.w,py:pl.y,alive:true,dt:0});});return e;}
+function makeSpikes(){const s=[],hp=ALLP.filter(p=>p.t==='h'),mp=ALLP.filter(p=>p.t==='m');hp.forEach((pl,i)=>{if(i%4!==2)return;s.push({x:pl.x+Math.floor(pl.w/2)-8,y:pl.y-13,w:16,h:13});});mp.forEach((pl,i)=>{if(i%7!==4)return;s.push({x:pl.x+pl.w-24,y:pl.y-13,w:16,h:13});});return s;}
+function makeHealth(){const h=[];for(let i=0;i<18;i++)h.push({x:320+i*410,y:395,amount:1,color:'#22c55e',glow:'#16a34a',shape:'heart',col:false,bob:i*.6});for(let i=0;i<12;i++)h.push({x:600+i*600,y:382,amount:2,color:'#38bdf8',glow:'#0284c7',shape:'diamond',col:false,bob:i*.8});for(let i=0;i<8;i++)h.push({x:900+i*900,y:368,amount:3,color:'#fbbf24',glow:'#d97706',shape:'star',col:false,bob:i*1.1});return h;}
+// 10 hourglass time bonuses — evenly spaced across level, on elevated platforms
+function makeTimePowerups(){
+  const t=[];
+  // Place on mid-height platforms for visibility, spread across full LW
+  const positions=[480,1200,1880,2560,3200,3860,4520,5200,5880,6600];
+  positions.forEach((x,i)=>{
+    // Alternate between mid and high platform heights
+    const y=i%2===0?265:225;
+    t.push({x,y,col:false,bob:i*.65,pulse:i*.4});
+  });
+  return t;
+}
+
+// ═══════════════════════════════════════════════
+// CANVAS RESIZE — fits gameArea maintaining 16:9
+// ═══════════════════════════════════════════════
+const cv=document.getElementById('cv');
+const tip=document.getElementById('tip');
+const gameArea=document.getElementById('gameArea');
+let scX=1,scY=1,cvOffL=0,cvOffT=0;
+
+function resize(){
+  const isLandscape=window.innerWidth>window.innerHeight;
+  const aw=gameArea.clientWidth,ah=gameArea.clientHeight;
+  let cw=aw,ch=aw*GH/GW;
+  if(ch>ah){ch=ah;cw=ah*GW/GH;}
+  cw=Math.floor(cw);ch=Math.floor(ch);
+  cv.style.width=cw+'px';cv.style.height=ch+'px';
+  scX=cw/GW;scY=ch/GH;
+  cvOffL=(aw-cw)/2;cvOffT=(ah-ch)/2;
+}
+window.addEventListener('resize',()=>setTimeout(resize,60));
+window.addEventListener('orientationchange',()=>setTimeout(resize,180));
+resize();
+
+// ═══════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════
+let GS=null,collected=[],phase='start',rafId=null,ctrlMode='pc';
+const keys={},tch={l:false,r:false};
+let mx=-1,my=-1,hovPk=null;
+
+function initGS(){
+  GS={pl:{x:60,y:380,w:26,h:34,vx:0,vy:0,og:false,face:1,jl:1,mj:1,sc:1,al:1,inv:0,lsx:60,lsy:380},
+    cam:{x:0},pks:makePickups(),plats:ALLP,ens:makeEnemies(),spks:makeSpikes(),
+    hitems:makeHealth(),titems:makeTimePowerups(),parts:[],pt:null,pe:0,mul:1,score:0,cnt:0,lives:7,
+    timeLeft:600, // 10 minutes in seconds
+    notif:null,ne:0,hn:null,hne:0,tn:null,tne:0};
+  collected=[];}
+
+// ── Input ────────────────────────────────────────────────
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(['ArrowLeft','ArrowRight','ArrowUp',' '].includes(e.key))e.preventDefault();
+  if((e.key==='ArrowUp'||e.key===' '||e.key==='w'||e.key==='W')&&!e.repeat&&phase==='playing')doJump();});
+document.addEventListener('keyup',e=>delete keys[e.key]);
+document.addEventListener('touchmove',e=>{if(e.target===cv||e.target===document.body)e.preventDefault();},{passive:false});
+
+const cL=document.getElementById('cL'),cR=document.getElementById('cR'),cJ=document.getElementById('cJ');
+cL.addEventListener('pointerdown',e=>{e.preventDefault();tch.l=true;});
+cL.addEventListener('pointerup',()=>tch.l=false);cL.addEventListener('pointerleave',()=>tch.l=false);
+cR.addEventListener('pointerdown',e=>{e.preventDefault();tch.r=true;});
+cR.addEventListener('pointerup',()=>tch.r=false);cR.addEventListener('pointerleave',()=>tch.r=false);
+cJ.addEventListener('pointerdown',e=>{e.preventDefault();if(phase==='playing')doJump();});
+
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();mx=(e.clientX-r.left)*(GW/r.width);my=(e.clientY-r.top)*(GH/r.height);});
+cv.addEventListener('mouseleave',()=>{mx=-1;my=-1;});
+
+function doJump(){if(!GS)return;const p=GS.pl,pt=GS.pt;
+  const jp=(pt==='superstrong'||pt==='giant')?15:pt==='strong'?13.5:pt==='hop'?7.5:pt==='float'?9:12;
+  if(p.jl>0){p.vy=-jp;p.jl--;Aud.jump();}}
+
+// ── Mode selector ────────────────────────────────────────
+function setMode(m){
+  ctrlMode=m;
+  document.getElementById('pcCard').classList.toggle('on',m==='pc');
+  document.getElementById('mobCard').classList.toggle('on',m==='mob');
+  document.getElementById('modeHint').textContent=m==='pc'?'⌨️ ←→ hareket · ↑/Boşluk zıpla':'📱 Yan sidebar veya alt tuşlar — oyun alanına BINMEZ!';
+  const ctrlBar=document.getElementById('ctrlBar');
+  const pcHint=document.getElementById('pcHint');
+  if(m==='mob'){pcHint.style.display='none';[cL,cR,cJ].forEach(b=>b.style.opacity='1');}
+  else{pcHint.style.display='block';[cL,cR,cJ].forEach(b=>b.style.opacity='.2');}
+}
+window.setMode=setMode;
+// default PC: controls visible but dim
+[cL,cR,cJ].forEach(b=>b.style.opacity='.2');
+
+// ── Tab system ───────────────────────────────────────────
+function showTab(id,btn){document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on'));document.getElementById(id).classList.add('on');if(btn)btn.classList.add('on');}
+window.showTab=showTab;
+
+// ═══════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════
+function startLoop(){if(rafId)cancelAnimationFrame(rafId);(function L(){if(phase!=='playing'){rafId=null;return;}update();draw();rafId=requestAnimationFrame(L);})();}
+
+function update(){
+  const gs=GS,now=Date.now(),p=gs.pl;
+  if(gs.pt&&now>gs.pe){gs.pt=null;gs.mul=1;p.sc=1;p.al=1;p.mj=1;}
+  const pt=gs.pt,frozen=pt==='freeze';
+  if(!frozen){
+    const L=keys['ArrowLeft']||keys['a']||keys['A']||tch.l;
+    const R=keys['ArrowRight']||keys['d']||keys['D']||tch.r;
+    const spd=pt==='superfast'?9:(pt==='fast'||pt==='speedup')?6.5:(pt==='slow'||pt==='slowdown')?2.2:pt==='brake'?1.3:pt==='slowmo'?3:pt==='rage'?7:4;
+    const grav=pt==='float'?.18:pt==='giant'?.88:pt==='stick'?.32:.58;
+    const mir=pt==='mirror'?-1:1;
+    if(L){p.vx=-spd*mir;p.face=-1*mir;}else if(R){p.vx=spd*mir;p.face=1*mir;}
+    else{p.vx*=(pt==='glide'||pt==='slide')?.975:.78;if(Math.abs(p.vx)<.08)p.vx=0;}
+    if(pt==='erratic')p.vx+=(Math.random()-.5)*2.8;
+    if(pt==='vibrate')p.x+=Math.sin(now*.04)*1.8;
+    p.vy+=grav;if(p.vy>16)p.vy=16;p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0){p.x=0;p.vx=0;}if(p.x+p.w>LW){p.x=LW-p.w;p.vx=0;}
+    if(p.y>GH+130){p.x=p.lsx;p.y=p.lsy-55;p.vx=0;p.vy=0;}
+    p.og=false;
+    gs.plats.forEach(pl=>{const py=p.y-p.vy,pb=p.y+p.h,ppb=py+p.h;
+      if(p.x+p.w>pl.x&&p.x<pl.x+pl.w&&pb>=pl.y&&ppb<=pl.y+5&&p.vy>=0){
+        pt==='bounce'?p.vy=-8.5:(()=>{p.vy=0;p.y=pl.y-p.h;})();
+        p.og=true;p.jl=p.mj;p.lsx=p.x;p.lsy=pl.y;}});
+    if(p.inv>0){p.inv--;p.al=p.inv%8<4?.3:1;}else p.al=pt==='stealth'?.22:1;
+    if(p.inv<=0)gs.spks.forEach(sp=>{if(p.x+p.w>sp.x+2&&p.x<sp.x+sp.w-2&&p.y+p.h>sp.y+2&&p.y<sp.y+sp.h)hurtP(true);});
+    gs.ens.forEach(en=>{if(!en.alive){en.dt--;return;}en.x+=en.vx;if(en.x<en.px||en.x+en.w>en.px+en.pw)en.vx*=-1;
+      if(p.inv<=0){const stomp=p.x+p.w>en.x+2&&p.x<en.x+en.w-2&&p.y+p.h>en.y+en.h*.5&&p.y+p.h<en.y+en.h+10&&p.vy>0;const side=p.x+p.w>en.x+2&&p.x<en.x+en.w-2&&p.y+p.h>en.y+4&&p.y<en.y+en.h;
+        if(stomp){en.alive=false;en.dt=25;spawnP(en.x+en.w/2,en.y+en.h/2,'#f87171',12);Aud.stomp();p.vy=-10;p.jl=p.mj;gs.score+=50*gs.mul;}else if(side)hurtP(false);}});
+    if(pt==='magnet')gs.pks.forEach(pk=>{if(pk.col)return;const dx=(p.x+p.w/2)-pk.px,dy=(p.y+p.h/2)-pk.py,d=Math.sqrt(dx*dx+dy*dy);if(d<140){pk.px+=dx*.07;pk.py+=dy*.07;}});
+    gs.pks.forEach(pk=>{if(pk.col)return;const dx=Math.abs((p.x+p.w/2)-pk.px),dy=Math.abs((p.y+p.h/2)-pk.py);
+      if(dx<28&&dy<28){pk.col=true;gs.cnt++;gs.score+=(10+pk.id)*gs.mul;spawnP(pk.px,pk.py,CC[pk.cat]||'#fff',16);actEff(pk);collected.push(pk);Aud.termSound(pk);gs.notif=pk;gs.ne=now+3800;if(gs.cnt>=106)setTimeout(()=>endG('win'),700);}});
+    gs.hitems.forEach(hi=>{if(hi.col)return;const dx=Math.abs((p.x+p.w/2)-hi.x),dy=Math.abs((p.y+p.h/2)-hi.y);
+      if(dx<24&&dy<24){hi.col=true;const prev=gs.lives;gs.lives=Math.min(7,gs.lives+hi.amount);const gained=gs.lives-prev;if(gained>0){spawnP(hi.x,hi.y,hi.color,gained*6);Aud.healSfx(hi.amount);gs.hn={amount:gained,color:hi.color};gs.hne=now+1800;}}});
+    // ── Time powerups ─────────────────────────────────────
+    gs.titems.forEach(ti=>{if(ti.col)return;const dx=Math.abs((p.x+p.w/2)-ti.x),dy=Math.abs((p.y+p.h/2)-ti.y);
+      if(dx<26&&dy<26){ti.col=true;gs.timeLeft=Math.min(600,gs.timeLeft+30);spawnP(ti.x,ti.y,'#eab308',20);Aud.timeBonusSfx();gs.tn={text:'+30 Sn!'};gs.tne=now+2200;}});
+    // ── Countdown timer ───────────────────────────────────
+    gs.timeLeft=Math.max(0,gs.timeLeft-1/60); // decrease per frame (~60fps)
+    if(gs.timeLeft<=0)setTimeout(()=>endG('gameover'),200);
+    const tgt=p.x-GW*.38;gs.cam.x+=(tgt-gs.cam.x)*.11;gs.cam.x=Math.max(0,Math.min(LW-GW,gs.cam.x));}
+  if(gs.notif&&now>gs.ne)gs.notif=null;if(gs.hn&&now>gs.hne)gs.hn=null;if(gs.tn&&now>gs.tne)gs.tn=null;
+  gs.parts=gs.parts.filter(pt2=>pt2.lf>0);gs.parts.forEach(pt2=>{pt2.x+=pt2.vx;pt2.y+=pt2.vy;pt2.vy+=.14;pt2.lf--;});
+  if(mx>0&&GS){const cx=GS.cam.x;let cl=null,cd=58;GS.pks.forEach(pk=>{if(pk.col)return;const rx=pk.px-cx,d=Math.sqrt((mx-rx)**2+(my-pk.py)**2);if(d<cd){cd=d;cl=pk;}});hovPk=cl;}else hovPk=null;}
+
+function hurtP(isSp){if(!GS||GS.pl.inv>0)return;GS.lives--;GS.pl.inv=110;spawnP(GS.pl.x+13,GS.pl.y+17,'#f87171',8);isSp?Aud.spike():Aud.hurt();if(GS.lives<=0)setTimeout(()=>endG('gameover'),600);}
+function actEff(pk){const p=GS.pl,e=pk.eff;const dur=e==='freeze'?2600:e==='permanent'?15000:e==='burst'?600:6500;GS.pt=e;GS.pe=Date.now()+dur;GS.mul=e==='score3x'?3:e==='score2x'?2:1;if(e==='burst'){p.vx=p.face*13;p.vy=-9;}if(e==='giant')p.sc=1.8;if(e==='small')p.sc=.6;if(e==='stealth')p.al=.22;if(e==='double_jump'){p.mj=2;p.jl=2;}if(e==='chain_jump'){p.mj=3;p.jl=3;}if(e==='step_up')p.mj=2;if(e==='hop'){p.mj=3;p.jl=3;}if(e==='big_boost')p.vy=-15;if(e==='pulse')p.vy=-11;if(e==='small_boost')p.vy=-13;if(e==='stack')GS.mul=Math.min(5,GS.mul+1);if(e==='heal')GS.lives=Math.min(7,GS.lives+1);}
+function spawnP(x,y,col,n){if(!GS)return;for(let i=0;i<n;i++){const a=(i/n)*Math.PI*2;GS.parts.push({x,y,vx:Math.cos(a)*4,vy:Math.sin(a)*4-2,color:col,sz:4.5,lf:50,ml:50});}}
+
+// ═══════════════════════════════════════════════
+// DRAW
+// ═══════════════════════════════════════════════
+const ctx=cv.getContext('2d');
+function dHeart(x,y,r,col,g){ctx.save();ctx.shadowColor=g;ctx.shadowBlur=13;ctx.fillStyle=col;ctx.translate(x,y);ctx.beginPath();ctx.moveTo(0,r*.4);ctx.bezierCurveTo(-r*.1,r*.1,-r*1.1,-r*.4,0,-r*1.1);ctx.bezierCurveTo(r*1.1,-r*.4,r*.1,r*.1,0,r*.4);ctx.fill();ctx.restore();}
+function dDiam(x,y,r,col,g){ctx.save();ctx.shadowColor=g;ctx.shadowBlur=13;ctx.fillStyle=col;ctx.translate(x,y);ctx.rotate(Math.PI/4);ctx.fillRect(-r,-r,r*2,r*2);ctx.restore();}
+function dStar(x,y,oR,iR,pts,col,g){ctx.save();ctx.shadowColor=g;ctx.shadowBlur=17;ctx.fillStyle=col;ctx.translate(x,y);ctx.beginPath();for(let i=0;i<pts*2;i++){const r=i%2===0?oR:iR,a=(i*Math.PI)/pts-Math.PI/2;i===0?ctx.moveTo(r*Math.cos(a),r*Math.sin(a)):ctx.lineTo(r*Math.cos(a),r*Math.sin(a));}ctx.closePath();ctx.fill();ctx.restore();}
+// Hourglass — distinctive purple-gold rotating shape
+function dHourglass(x,y,t,pulse){
+  const sc=1+Math.sin(t*0.003+pulse)*0.08; // gentle pulse
+  const rot=Math.sin(t*0.0015+pulse)*0.25; // slight wobble
+  ctx.save();ctx.translate(x,y);ctx.rotate(rot);ctx.scale(sc,sc);
+  // Glow ring
+  const grad=ctx.createRadialGradient(0,0,4,0,0,22);
+  grad.addColorStop(0,'rgba(234,179,8,.28)');
+  grad.addColorStop(0.6,'rgba(168,85,247,.18)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();ctx.arc(0,0,22,0,Math.PI*2);ctx.fillStyle=grad;ctx.fill();
+  // Outer gold border ring
+  ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);
+  ctx.strokeStyle='rgba(234,179,8,.7)';ctx.lineWidth=2;ctx.stroke();
+  // Hourglass shape (two triangles)
+  const H=13,W=10;
+  // Top triangle
+  ctx.beginPath();ctx.moveTo(-W,-H);ctx.lineTo(W,-H);ctx.lineTo(0,0);ctx.closePath();
+  const tg=ctx.createLinearGradient(0,-H,0,0);
+  tg.addColorStop(0,'#a855f7');tg.addColorStop(1,'#eab308');
+  ctx.fillStyle=tg;ctx.shadowColor='#eab308';ctx.shadowBlur=12;ctx.fill();
+  // Bottom triangle
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(-W,H);ctx.lineTo(W,H);ctx.closePath();
+  const bg2=ctx.createLinearGradient(0,0,0,H);
+  bg2.addColorStop(0,'#eab308');bg2.addColorStop(1,'#a855f7');
+  ctx.fillStyle=bg2;ctx.fill();
+  // Middle squeeze lines
+  ctx.strokeStyle='rgba(234,179,8,.9)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(-W,-H);ctx.lineTo(W,-H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-W,H);ctx.lineTo(W,H);ctx.stroke();
+  // Sand particles (animated)
+  const numSand=Math.floor((t/10)%4)+2;
+  ctx.fillStyle='rgba(234,179,8,.85)';
+  for(let i=0;i<numSand;i++){const sx=(i-numSand/2)*1.6,sy=i*1.5-2;ctx.beginPath();ctx.arc(sx,sy,1,0,Math.PI*2);ctx.fill();}
+  ctx.restore();
+  // +30s label below
+  ctx.font='bold 8px monospace';ctx.fillStyle='#eab308';ctx.textAlign='center';ctx.textBaseline='top';
+  ctx.fillText('+30sn',x,y+21);
+}
+
+function draw(){
+  if(!GS)return;const gs=GS,now=Date.now(),p=gs.pl,camX=gs.cam.x;
+  // Sky
+  const sky=ctx.createLinearGradient(0,0,0,GH);sky.addColorStop(0,'#060a18');sky.addColorStop(1,'#0d1635');ctx.fillStyle=sky;ctx.fillRect(0,0,GW,GH);
+  // Stars
+  for(let i=0;i<110;i++){const sx=((i*179+i*i*11)%LW)-camX;if(sx<-2||sx>GW+2)continue;const sy=(i*83+29)%(GH*.72),br=Math.sin(now*.001+i*.7)*.4+.6;ctx.fillStyle=`rgba(255,255,255,${(br*.65).toFixed(2)})`;ctx.fillRect(sx,sy,i%7===0?2:1,i%7===0?2:1);}
+  // Staff BG
+  for(let i=0;i<5;i++){const ly=90+i*16,lx=-(camX*.15)%200;ctx.strokeStyle='rgba(255,255,255,.03)';ctx.lineWidth=1;ctx.beginPath();for(let x=lx;x<GW;x+=200){ctx.moveTo(x,ly);ctx.lineTo(x+180,ly);}ctx.stroke();}
+  // Platforms
+  gs.plats.forEach(pl=>{const rx=pl.x-camX;if(rx+pl.w<0||rx>GW)return;if(pl.t==='g'){ctx.fillStyle='#172b12';ctx.fillRect(rx,pl.y,pl.w,pl.h);ctx.fillStyle='#264d1e';ctx.fillRect(rx,pl.y,pl.w,7);ctx.fillStyle='#377a2a';ctx.fillRect(rx,pl.y,pl.w,3);}else if(pl.t==='m'){ctx.fillStyle='#1a3356';ctx.fillRect(rx,pl.y,pl.w,pl.h);ctx.fillStyle='rgba(56,189,248,.25)';ctx.fillRect(rx,pl.y,pl.w,3);}else{ctx.fillStyle='#28155a';ctx.fillRect(rx,pl.y,pl.w,pl.h);ctx.fillStyle='rgba(192,132,252,.28)';ctx.fillRect(rx,pl.y,pl.w,3);}});
+  // Spikes
+  gs.spks.forEach(sp=>{const rx=sp.x-camX;if(rx+sp.w<0||rx>GW)return;ctx.save();ctx.shadowColor='#ef4444';ctx.shadowBlur=9;ctx.fillStyle='#dc2626';ctx.beginPath();for(let i=0;i<3;i++){const tx=rx+i*(sp.w/3);ctx.moveTo(tx,sp.y+sp.h);ctx.lineTo(tx+sp.w/6,sp.y);ctx.lineTo(tx+sp.w/3,sp.y+sp.h);}ctx.fill();ctx.restore();});
+  // Health items
+  gs.hitems.forEach(hi=>{if(hi.col)return;const rx=hi.x-camX;if(rx<-30||rx>GW+30)return;const bob=Math.sin(now*.0018+hi.bob)*4,ry=hi.y+bob;if(hi.shape==='heart')dHeart(rx,ry,9,hi.color,hi.glow);else if(hi.shape==='diamond')dDiam(rx,ry,9,hi.color,hi.glow);else dStar(rx,ry,11,5,5,hi.color,hi.glow);ctx.font='bold 8px monospace';ctx.fillStyle=hi.color;ctx.textAlign='center';ctx.textBaseline='top';ctx.fillText('+'+hi.amount,rx,ry+13);});
+  // Time powerups (hourglasses)
+  gs.titems.forEach(ti=>{if(ti.col)return;const rx=ti.x-camX;if(rx<-40||rx>GW+40)return;
+    const floatY=ti.y+Math.sin(now*.002+ti.bob)*6;
+    dHourglass(rx,floatY,now,ti.pulse);});
+  // Enemies
+  gs.ens.forEach(en=>{const rx=en.x-camX;if(rx+en.w<0||rx>GW+en.w)return;if(!en.alive){if(en.dt>0){ctx.globalAlpha=en.dt/25;ctx.font='14px serif';ctx.fillStyle='#fde047';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('×',rx+en.w/2,en.y+en.h/2-en.dt*.5);ctx.globalAlpha=1;}return;}
+    ctx.save();ctx.shadowColor='#ef4444';ctx.shadowBlur=9;ctx.fillStyle='#991b1b';ctx.beginPath();ctx.ellipse(rx+en.w/2,en.y+en.h*.6,en.w/2,en.h*.45,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#fca5a5';ctx.beginPath();ctx.ellipse(rx+en.w/2,en.y+en.h*.55,en.w*.33,en.h*.3,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1a1a2e';ctx.font='bold 11px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('♩',rx+en.w/2,en.y+en.h*.55);const ex=en.vx>0?rx+en.w*.65:rx+en.w*.3;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ex,en.y+en.h*.28,3.5,0,Math.PI*2);ctx.fill();ctx.fillStyle='#1a1a2e';ctx.beginPath();ctx.arc(ex+(en.vx>0?.8:-.8),en.y+en.h*.28,2,0,Math.PI*2);ctx.fill();ctx.restore();});
+  // Pickups
+  gs.pks.forEach(pk=>{if(pk.col)return;const rx=pk.px-camX;if(rx<-45||rx>GW+45)return;const bob=Math.sin(now*.0022+pk.id*.9)*5,ry=pk.py+bob,col=CC[pk.cat]||'#fff',hov=hovPk&&hovPk.id===pk.id;ctx.save();ctx.shadowColor=col;ctx.shadowBlur=hov?32:17;ctx.beginPath();ctx.arc(rx,ry,hov?21:17,0,Math.PI*2);ctx.fillStyle=col+(hov?'40':'26');ctx.fill();ctx.strokeStyle=col;ctx.lineWidth=hov?3:2.5;ctx.stroke();ctx.restore();ctx.font=`bold ${hov?16:14}px serif`;ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('♪',rx,ry);ctx.font='7.5px monospace';ctx.fillStyle=col;ctx.fillText(pk.name.length>9?pk.name.substring(0,8)+'…':pk.name,rx,ry+28);});
+  // Particles
+  gs.parts.forEach(pt2=>{ctx.globalAlpha=pt2.lf/pt2.ml;ctx.fillStyle=pt2.color;ctx.beginPath();ctx.arc(pt2.x-camX,pt2.y,pt2.sz*(pt2.lf/pt2.ml),0,Math.PI*2);ctx.fill();});ctx.globalAlpha=1;
+  // Player
+  const pt=gs.pt,pw=p.w*p.sc,ph=p.h*p.sc;
+  const prx=p.x-camX+p.w/2-pw/2;  // x in game coords
+  const pry=p.y+p.h-ph;            // y in game coords (feet at bottom)
+  ctx.globalAlpha=p.al;
+  ctx.fillStyle='rgba(0,0,0,.3)';ctx.beginPath();ctx.ellipse(prx+pw/2,p.y+p.h+4,pw*.5,5,0,0,Math.PI*2);ctx.fill();
+  let bc='#3b82f6';
+  if(pt==='rage')bc='#ef4444';else if(pt==='stealth')bc='#475569';else if(pt==='giant')bc='#7c3aed';else if(pt==='shield')bc='#d97706';else if(pt==='freeze')bc='#7dd3fc';else if(pt==='color')bc=`hsl(${(now*.12)%360},80%,58%)`;else if(pt==='float')bc='#a78bfa';else if(pt==='bounce')bc='#10b981';else if(pt==='superfast')bc='#f59e0b';
+  if(pt&&pt!=='normal'){ctx.save();ctx.shadowColor=bc;ctx.shadowBlur=20;ctx.fillStyle=bc;ctx.beginPath();ctx.roundRect?ctx.roundRect(prx,pry,pw,ph,6):ctx.rect(prx,pry,pw,ph);ctx.fill();ctx.restore();}
+  else{ctx.fillStyle=bc;ctx.beginPath();ctx.roundRect?ctx.roundRect(prx,pry,pw,ph,6):ctx.rect(prx,pry,pw,ph);ctx.fill();}
+  ctx.globalAlpha=p.al;
+  ctx.font=`${Math.round(13*p.sc)}px serif`;ctx.fillStyle='#fde047';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText('♩',prx+pw/2,pry-1);
+  const ex2=p.face>0?prx+pw*.68:prx+pw*.22;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ex2,pry+ph*.3,4.5*p.sc,0,Math.PI*2);ctx.fill();ctx.fillStyle='#0f172a';ctx.beginPath();ctx.arc(ex2+p.face*1.5,pry+ph*.3,2.8*p.sc,0,Math.PI*2);ctx.fill();
+  if(pt==='shield'){ctx.globalAlpha=p.al*(Math.sin(now*.006)*.2+.5);ctx.strokeStyle='#fbbf24';ctx.lineWidth=3;ctx.beginPath();ctx.arc(prx+pw/2,pry+ph/2,pw*.9,0,Math.PI*2);ctx.stroke();}
+  ctx.globalAlpha=1;
+  if(pt==='freeze'){ctx.fillStyle='rgba(125,211,252,.11)';ctx.fillRect(0,0,GW,GH);ctx.font='bold 24px serif';ctx.fillStyle='rgba(125,211,252,.9)';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('❄ FERMATA ❄',GW/2,GH/2);ctx.font='13px monospace';ctx.fillStyle='rgba(186,230,253,.8)';ctx.fillText('Zaman durdu!',GW/2,GH/2+34);}
+  // HUD
+  ctx.fillStyle='rgba(6,10,24,.82)';ctx.fillRect(0,0,GW,50);ctx.fillStyle='rgba(255,255,255,.05)';ctx.fillRect(0,50,GW,1);
+  ctx.font='bold 15px monospace';ctx.fillStyle='#fde047';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText('♪ '+gs.score.toLocaleString(),12,22);
+  if(gs.mul>1){ctx.font='bold 11px monospace';ctx.fillStyle='#f87171';ctx.fillText('×'+gs.mul,108,22);}
+  let lx=GW-10;for(let i=0;i<7;i++){ctx.font='12px serif';ctx.textAlign='right';ctx.textBaseline='middle';ctx.globalAlpha=i<gs.lives?1:.2;ctx.fillText('❤️',lx,22);ctx.globalAlpha=1;lx-=17;}
+  // ── TIMER — right side below lives ──────────────────────
+  {
+    const tl=Math.max(0,gs.timeLeft);
+    const mins=Math.floor(tl/60);const secs=Math.floor(tl%60);
+    const tStr=(mins>0?mins+'m ':'')+String(secs).padStart(2,'0')+'s';
+    // Color based on urgency
+    let tCol='#67e8f9';
+    if(tl<=30)tCol='#f87171';
+    else if(tl<=60)tCol='#fb923c';
+    // Pulse/shake when < 10s
+    let tx2=GW-10,ty2=38;
+    if(tl<=10&&tl>0){const shake=(Math.sin(now*.03)*2);tx2+=shake;}
+    // Timer background pill
+    const pillW=72,pillH=17;
+    ctx.save();
+    if(tl<=60){ctx.shadowColor=tCol;ctx.shadowBlur=tl<=30?16:8;}
+    ctx.fillStyle=tl<=30?'rgba(239,68,68,.18)':tl<=60?'rgba(251,146,60,.12)':'rgba(103,232,249,.08)';
+    ctx.beginPath();ctx.roundRect?ctx.roundRect(tx2-pillW,ty2-pillH/2,pillW,pillH,8):ctx.rect(tx2-pillW,ty2-pillH/2,pillW,pillH);ctx.fill();
+    ctx.strokeStyle=tCol;ctx.lineWidth=1;ctx.beginPath();ctx.roundRect?ctx.roundRect(tx2-pillW,ty2-pillH/2,pillW,pillH,8):ctx.rect(tx2-pillW,ty2-pillH/2,pillW,pillH);ctx.stroke();
+    ctx.restore();
+    // Hourglass icon + time text
+    ctx.font=`bold ${tl<=30?13:12}px monospace`;ctx.fillStyle=tCol;ctx.textAlign='right';ctx.textBaseline='middle';
+    ctx.fillText('⧗ '+tStr,tx2-4,ty2);
+  }
+  ctx.font='10.5px monospace';ctx.fillStyle='#67e8f9';ctx.textAlign='center';ctx.fillText('🎵 '+gs.cnt+' / 106 Terim',GW/2,13);
+  ctx.fillStyle='rgba(255,255,255,.1)';ctx.fillRect(GW/2-115,25,230,9);
+  const gr=ctx.createLinearGradient(GW/2-115,0,GW/2+115,0);gr.addColorStop(0,'#38bdf8');gr.addColorStop(1,'#c084fc');ctx.fillStyle=gr;ctx.fillRect(GW/2-115,25,230*(gs.cnt/106),9);
+  if(pt&&now<gs.pe){const rem=Math.max(0,(gs.pe-now)/6500);ctx.font='9px monospace';ctx.fillStyle='#e2e8f0';ctx.textAlign='left';ctx.fillText(pt,12,40);ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(12,44,100,4);ctx.fillStyle='#fde047';ctx.fillRect(12,44,100*Math.min(1,rem),4);}
+  if(gs.hn&&now<gs.hne){const hc=gs.hn.color,t2=Math.max(0,(gs.hne-now)/1800);ctx.globalAlpha=t2>.7?1:t2/.7;ctx.save();ctx.shadowColor=hc;ctx.shadowBlur=18;ctx.font='bold 16px monospace';ctx.fillStyle=hc;ctx.textAlign='center';ctx.fillText('+'+gs.hn.amount+' ❤️',GW/2,gs.notif?168:86);ctx.restore();ctx.globalAlpha=1;}
+  // Time bonus notification
+  if(gs.tn&&now<gs.tne){const t3=Math.max(0,(gs.tne-now)/2200);ctx.globalAlpha=t3>.7?1:t3/.7;
+    ctx.save();ctx.shadowColor='#eab308';ctx.shadowBlur=24;
+    // Big flash pill
+    const pillW2=160,pillH2=32,pillX=GW/2-pillW2/2,pillY=gs.hn?142:60;
+    ctx.fillStyle='rgba(234,179,8,.14)';ctx.beginPath();ctx.roundRect?ctx.roundRect(pillX,pillY,pillW2,pillH2,10):ctx.rect(pillX,pillY,pillW2,pillH2);ctx.fill();
+    ctx.strokeStyle='#eab308';ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect?ctx.roundRect(pillX,pillY,pillW2,pillH2,10):ctx.rect(pillX,pillY,pillW2,pillH2);ctx.stroke();
+    ctx.font='bold 14px monospace';ctx.fillStyle='#eab308';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('⧗ +30 Saniye!',GW/2,pillY+pillH2/2);
+    ctx.restore();ctx.globalAlpha=1;}
+  // ── Low-time screen flash ─────────────────────────────
+  if(gs.timeLeft<=10&&gs.timeLeft>0){
+    const flash=Math.sin(now*.012)*0.5+0.5;
+    ctx.fillStyle=`rgba(239,68,68,${flash*.08})`;ctx.fillRect(0,0,GW,GH);}
+  else if(gs.timeLeft<=30&&gs.timeLeft>0){
+    const flash2=Math.sin(now*.006)*0.5+0.5;
+    ctx.fillStyle=`rgba(251,146,60,${flash2*.05})`;ctx.fillRect(0,0,GW,GH);}
+  // Minimap
+  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(10,GH-12,GW-20,9);
+  ctx.fillStyle='#fde047';gs.pks.forEach(pk=>{if(!pk.col)ctx.fillRect(10+(pk.px/LW)*(GW-20)-1,GH-12,2,9);});
+  ctx.fillStyle='rgba(56,189,248,.7)';gs.hitems.forEach(hi=>{if(!hi.col)ctx.fillRect(10+(hi.x/LW)*(GW-20)-1,GH-12,1,9);});
+  // Time items on minimap — bright gold, larger dot
+  gs.titems.forEach(ti=>{if(!ti.col){ctx.fillStyle='#eab308';const tmx=10+(ti.x/LW)*(GW-20);ctx.fillRect(tmx-2,GH-13,4,11);}});
+  ctx.fillStyle='#ef4444';gs.ens.forEach(en=>{if(en.alive)ctx.fillRect(10+(en.x/LW)*(GW-20)-1,GH-12,2,9);});
+  ctx.fillStyle='#fff';const pmx=10+(p.x/LW)*(GW-20);ctx.fillRect(pmx-3,GH-14,6,11);
+  // Term notif popup
+  if(gs.notif&&now<gs.ne){const n2=gs.notif,nc=CC[n2.cat]||'#fff',nw=215,nh=108,nx=GW/2-nw/2,ny=54;ctx.save();ctx.shadowColor=nc;ctx.shadowBlur=11;ctx.fillStyle='rgba(6,10,24,.96)';ctx.beginPath();ctx.roundRect?ctx.roundRect(nx,ny,nw,nh,10):ctx.rect(nx,ny,nw,nh);ctx.fill();ctx.strokeStyle=nc;ctx.lineWidth=1.5;ctx.beginPath();ctx.roundRect?ctx.roundRect(nx,ny,nw,nh,10):ctx.rect(nx,ny,nw,nh);ctx.stroke();ctx.restore();ctx.font='18px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(ei(n2.eff),nx+nw/2,ny+19);ctx.font='bold 13.5px Georgia';ctx.fillStyle=nc;ctx.fillText(n2.name,nx+nw/2,ny+41);ctx.font='8.5px monospace';ctx.fillStyle='#475569';ctx.fillText(CTR[n2.cat].toUpperCase(),nx+nw/2,ny+55);ctx.font='10.5px Georgia';ctx.fillStyle='#94a3b8';ctx.fillText(n2.tr,nx+nw/2,ny+70);ctx.font='bold 10px monospace';ctx.fillStyle=nc;ctx.fillText(n2.desc,nx+nw/2,ny+87);}
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  updateTip();}
+
+function updateTip(){
+  if(!hovPk||!GS){tip.style.display='none';return;}
+  const pk=hovPk,col=CC[pk.cat]||'#fff';
+  const r=cv.getBoundingClientRect();
+  const rx=(pk.px-GS.cam.x)*(r.width/GW)+r.left;
+  const ry=pk.py*(r.height/GH)+r.top;
+  let tx=rx-100,ty=ry-70;
+  if(tx<4)tx=4;if(tx+210>window.innerWidth)tx=window.innerWidth-214;if(ty<4)ty=4;
+  tip.style.display='block';tip.style.left=tx+'px';tip.style.top=ty+'px';
+  tip.style.border='2px solid '+col;tip.style.boxShadow='0 0 20px '+col+'44,0 8px 28px rgba(0,0,0,.8)';
+  tip.innerHTML='<div style="font-size:19px;margin-bottom:4px">'+ei(pk.eff)+'</div>'+
+    '<div style="color:'+col+';font-weight:bold;font-size:13.5px;font-family:Georgia,serif">'+pk.name+'</div>'+
+    '<div style="color:#475569;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;margin:3px 0">'+CTR[pk.cat]+'</div>'+
+    '<div style="color:#94a3b8;font-size:11px;line-height:1.4">'+pk.tr+'</div>'+
+    '<div style="color:'+col+';font-size:10.5px;font-weight:bold;margin-top:4px">'+pk.desc+'</div>';}
+
+// ═══════════════════════════════════════════════
+// END & UI
+// ═══════════════════════════════════════════════
+function endG(result){if(phase!=='playing')return;phase=result;if(rafId)cancelAnimationFrame(rafId);rafId=null;Aud.stopMusic();tip.style.display='none';result==='win'?Aud.win():Aud.gameover();result==='win'?showWin():showGO();}
+function hideAll(){['sStart','sInstall','sRules','sInfo','sGameover','sWin','sSettings'].forEach(id=>document.getElementById(id).classList.add('hidden'));}
+function showOnly(id){hideAll();document.getElementById(id).classList.remove('hidden');}
+function renderCards(cid,terms){
+  const el=document.getElementById(cid);
+  if(!terms||!terms.length){el.innerHTML='<p style="color:#334155;text-align:center;padding:26px;font-size:14px;grid-column:1/-1">Henüz terim toplanmadı!</p>';return;}
+  el.innerHTML=terms.map(t=>{const c=CC[t.cat]||'#fff';return`<div class="tcard" style="border-color:${c}22"><div style="display:flex;align-items:flex-start;gap:7px;margin-bottom:5px"><div style="width:34px;height:25px;flex-shrink:0;border-radius:5px;overflow:hidden;border:1px solid ${c}22;background:rgba(0,0,0,.3)">${CSVG[t.cat]||''}</div><div style="flex:1;min-width:0"><div style="color:${c};font-weight:bold;font-size:12px;font-family:Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name}</div><div style="color:#334155;font-size:9px;text-transform:uppercase;letter-spacing:.7px">${CTR[t.cat]}</div></div><span style="font-size:14px;flex-shrink:0">${ei(t.eff)}</span></div><div style="color:#e2e8f0;font-size:11px;margin-bottom:3px;line-height:1.35">${t.tr}</div><div style="color:${c};font-size:10px;font-weight:bold">${t.desc}</div></div>`;}).join('');}
+function showGO(){
+  const tl=GS?Math.max(0,GS.timeLeft):0;
+  const mins=Math.floor(tl/60),secs=Math.floor(tl%60);
+  const timeStr=tl<=0?'⧗ Süre doldu!':`⧗ Kalan süre: ${mins>0?mins+'d ':''} ${String(secs).padStart(2,'0')}sn`;
+  document.getElementById('goScore').textContent='Puan: '+(GS?GS.score:0).toLocaleString();
+  document.getElementById('goInfo').textContent='Toplanan: '+collected.length+' / 106 Terim  ·  '+timeStr;
+  renderCards('goCards',collected);showOnly('sGameover');document.getElementById('sGameover').scrollTop=0;}
+function showWin(){document.getElementById('winScore').textContent=(GS?GS.score:0).toLocaleString()+' Puan';renderCards('winCards',TERMS);showOnly('sWin');document.getElementById('sWin').scrollTop=0;}
+let sfrom='start';
+function openSettings(from){sfrom=from;showOnly('sSettings');}
+function startGame(){Aud.init();Aud.resume();hideAll();initGS();phase='playing';startLoop();Aud.startMusic();}
+
+// Button wiring
+document.getElementById('btnStart').onclick=startGame;
+document.getElementById('btnRules').onclick=()=>showOnly('sRules');
+document.getElementById('btnInfo').onclick=()=>showOnly('sInfo');
+document.getElementById('btnInstall').onclick=()=>showOnly('sInstall');
+document.getElementById('btnSettings').onclick=()=>openSettings('start');
+document.getElementById('installPlayBtn').onclick=startGame;
+document.getElementById('installBackBtn').onclick=()=>showOnly('sStart');
+document.getElementById('rulesPlayBtn').onclick=startGame;
+document.getElementById('rulesBackBtn').onclick=()=>showOnly('sStart');
+document.getElementById('infoPlayBtn').onclick=startGame;
+document.getElementById('infoBackBtn').onclick=()=>showOnly('sStart');
+document.getElementById('goRetryBtn').onclick=startGame;
+document.getElementById('goRulesBtn').onclick=()=>showOnly('sRules');
+document.getElementById('goSettingsBtn').onclick=()=>openSettings('gameover');
+document.getElementById('winRetryBtn').onclick=startGame;
+document.getElementById('winSettingsBtn').onclick=()=>openSettings('win');
+document.getElementById('settBackBtn').onclick=()=>{if(sfrom==='gameover')showOnly('sGameover');else if(sfrom==='win')showOnly('sWin');else showOnly('sStart');};
+document.getElementById('chkMusic').onchange=function(){Aud.init();Aud.resume();Aud.setMusic(this.checked);};
+document.getElementById('chkSfx').onchange=function(){Aud.setSfx(this.checked);};
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&phase==='playing'){if(rafId)cancelAnimationFrame(rafId);rafId=null;}else if(!document.hidden&&phase==='playing')startLoop();});
+showOnly('sStart');
+</script>
+</body>
+</html>
